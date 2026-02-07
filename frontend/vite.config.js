@@ -6,11 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/predict': 'http://localhost:8001',
-      '/history': 'http://localhost:8001',
-      '/get_chats': 'http://localhost:8001',
-      '/delete_chat': 'http://localhost:8001',
-      '/get_insights': 'http://localhost:8001',
+      '/predict': 'http://localhost:8000',
+      '/history': 'http://localhost:8000',
+      '/get_chats': 'http://localhost:8000',
+      '/delete_chat': 'http://localhost:8000',
+      '/get_insights': 'http://localhost:8000',
     }
   }
 })
