@@ -2,7 +2,7 @@ from pymongo import MongoClient
 from bson import ObjectId, errors
 import os
 
-MONGO_DETAILS = "mongodb://localhost:27017"
+MONGO_DETAILS = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 
 client = MongoClient(MONGO_DETAILS)
 

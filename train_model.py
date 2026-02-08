@@ -51,10 +51,16 @@ def map_label(label):
 
 def main():
     print("Loading dataset...")
+    # Dynamic path to Downloads folder
+    downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+    data_path = os.path.join(downloads_path, "Combined Data.csv")
+    
+    print(f"Looking for dataset at: {data_path}")
+    
     try:
-        df = pd.read_csv(r'c:\Users\ragha\Downloads\Combined Data.csv')
+        df = pd.read_csv(data_path)
     except FileNotFoundError:
-        print("Error: Dataset not found at c:\\Users\\ragha\\Downloads\\Combined Data.csv")
+        print(f"Error: Dataset not found at {data_path}")
         return
 
     # Check for required columns
@@ -97,7 +103,9 @@ def main():
     print(classification_report(y_test, y_pred))
 
     # Save model and vectorizer
-    model_dir = r"c:\Users\ragha\OneDrive\Desktop\Social_Anxiety_Detection_\backend\models"
+    # Use relative path 'backend/models'
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    model_dir = os.path.join(current_dir, "backend", "models")
     os.makedirs(model_dir, exist_ok=True)
     
     joblib.dump(model, os.path.join(model_dir, "anxiety_model.pkl"))
