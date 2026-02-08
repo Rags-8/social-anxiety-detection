@@ -70,3 +70,5 @@ UI runs at: `http://localhost:5173`
 
 ## Disclaimer
 This project is for educational purposes only. It is **not** a medical diagnosis tool. If you are in crisis, please contact professional mental health services.
+
+Public Url : https://social-anxiety-123.streamlit.app/
