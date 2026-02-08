@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/config';
 import { Trash2, ArrowLeft, Clock, MessageSquare } from 'lucide-react';
 
 const History = ({ onNavigate }) => {
@@ -11,7 +11,7 @@ const History = ({ onNavigate }) => {
 
     const fetchHistory = async () => {
         try {
-            const response = await axios.get('/history/guest');
+            const response = await api.get('/history/guest');
             setHistory(response.data.reverse()); // Show newest first
         } catch (error) {
             console.error("Error fetching history:", error);
@@ -21,7 +21,7 @@ const History = ({ onNavigate }) => {
     const deleteChat = async (id) => {
         if (!window.confirm("Are you sure you want to delete this record?")) return;
         try {
-            await axios.delete(`/history/${id}`);
+            await api.delete(`/history/${id}`);
             setHistory(prev => prev.filter(chat => chat.id !== id));
         } catch (error) {
             console.error("Error deleting chat:", error);

@@ -12,3 +12,4 @@ motor
 requests
 matplotlib
 seaborn
+python-dotenv

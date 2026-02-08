@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api/config'; // Use configured api
 import { Send, Loader, ArrowLeft } from 'lucide-react';
 
 const ChatInterface = ({ onNavigate }) => {
@@ -37,7 +37,7 @@ const ChatInterface = ({ onNavigate }) => {
         setIsLoading(true);
 
         try {
-            const response = await axios.post('/predict', {
+            const response = await api.post('/predict', {
                 text: userMessage.text,
                 user_id: 'guest'
             });

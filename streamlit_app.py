@@ -13,7 +13,12 @@ st.set_page_config(
 )
 
 # API Base URL
-API_URL = "http://127.0.0.1:8000"
+# API Base URL
+# Check if running in Streamlit Cloud (secrets available)
+try:
+    API_URL = st.secrets["API_URL"]
+except:
+    API_URL = "http://127.0.0.1:8000"
 USER_ID = "guest_streamlit"  # Fixed user for demo
 
 # -----------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/config';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ArrowLeft, Activity, AlertTriangle } from 'lucide-react';
 
@@ -12,7 +12,7 @@ const Analysis = ({ onNavigate }) => {
 
     const fetchStats = async () => {
         try {
-            const response = await axios.get('/get_insights/guest');
+            const response = await api.get('/get_insights/guest');
             const stats = response.data;
 
             const chartData = [
