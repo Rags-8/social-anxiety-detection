@@ -6,7 +6,10 @@ import joblib
 import os
 import numpy as np
 from datetime import datetime
-from .database import chats_collection as chat_collection, chat_helper, delete_chat
+try:
+    from backend.database import chats_collection as chat_collection, chat_helper, delete_chat
+except ImportError:
+    from database import chats_collection as chat_collection, chat_helper, delete_chat
 
 app = FastAPI()
 
