@@ -4,13 +4,24 @@ import json
 from datetime import datetime
 import pandas as pd
 
+
 # Set Page Config
 st.set_page_config(
-    page_title="MindCare AI Social Anxiety Detection",
-    page_icon="https://storage.googleapis.com/kaggle-datasets-images/6869808/11030579/4b09dfab8c969a055d4c2aebd7923f37/dataset-thumbnail.jpg?t=2025-03-14-13-07-42",
-    layout="wide",
-    initial_sidebar_state="expanded"
+        page_title="MindCare AI Social Anxiety Detection",
+        page_icon="https://storage.googleapis.com/kaggle-datasets-images/6869808/11030579/4b09dfab8c969a055d4c2aebd7923f37/dataset-thumbnail.jpg?t=2025-03-14-13-07-42",
+        layout="wide",
+        initial_sidebar_state="expanded"
 )
+
+# Initialize query params only once if needed
+if "page" not in st.session_state:
+    # Check query params for initial page
+    params = st.query_params.get_all("page")
+    if params:
+        st.session_state.page = params[0]
+    else:
+        st.session_state.page = "Home"
+
 
 # API Base URL
 # API Base URL
@@ -52,9 +63,26 @@ st.markdown("""
         color: var(--text-main);
     }
     
+    /* Header & Footer Customization */
+    /* Hide the standard Streamlit header elements (hamburger menu, deploy button) */
+    [data-testid="stToolbar"] {
+        visibility: hidden;
+    }
+    
+    /* Hide the decoration (rainbow line) */
+    [data-testid="stDecoration"] {
+        display: none;
+    }
+    
+    /* Ensure Sidebar Toggle (collapsedControl) is visible even if we hide other things */
+    [data-testid="collapsedControl"] {
+        visibility: visible;
+        color: #0F172A;
+    }
+
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* header {visibility: hidden;}  <-- Removed to fix sidebar toggle issue */
 
     /* Sidebar Styling */
     section[data-testid="stSidebar"] {
@@ -311,12 +339,10 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 # SIDEBAR NAVIGATION
 # -----------------------------------------------------------------------------
-if 'page' not in st.session_state:
-    st.session_state.page = "Home"
-
 def navigate():
-    # If the user clicks the radio, the value is automatically updated in session_state.page
-    pass
+    # Update query params to reflect current page
+    st.query_params["page"] = st.session_state.page
+
 
 st.markdown("""
 <style>
