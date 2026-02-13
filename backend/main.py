@@ -215,11 +215,28 @@ def clean_text(text):
     return text
 
 def check_harmful_content(text):
-    harmful_keywords = ["suicide", "kill myself", "die", "hurt myself", "death", "end my life"]
+    import re
     text_lower = text.lower()
-    for keyword in harmful_keywords:
-        if keyword in text_lower:
+    
+    # regex patterns for more robust matching
+    harmful_patterns = [
+        r"suicide", r"kill\s+myself", r"want\s+to\s+die", r"end\s+my\s+life",
+        r"hurt\s+myself", r"self[- ]?harm", r"better\s+off\s+dead",
+        # Cutting patterns (flexible matches)
+        r"cut\s+(?:my\s+|the\s+|a\s+)?(?:wrist|hand|arm|neck|throat|body|skin|myself|stomach|leg)",
+        r"cut\s+.*hand", # Catches "cut friend hand" or "cut my hand"
+        r"slits?\s+(?:my\s+|the\s+|a\s+)?(?:wrist|throat|neck)",
+        # General violence/weapons
+        r"stab\s+", r"shoot\s+", r"kill\s+", r"murder",
+        r"bleed", r"overdose", r"jump\s+off",
+        # Specific phrases from user complaints
+        r"cut\s+hand" 
+    ]
+    
+    for pattern in harmful_patterns:
+        if re.search(pattern, text_lower):
             return True
+            
     return False
 
 @app.get("/")

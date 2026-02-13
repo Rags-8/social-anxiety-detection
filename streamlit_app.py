@@ -3,6 +3,7 @@ import requests
 import json
 from datetime import datetime
 import pandas as pd
+import os
 
 
 # Set Page Config
@@ -24,12 +25,26 @@ if "page" not in st.session_state:
 
 
 # API Base URL
-# API Base URL
-# Check if running in Streamlit Cloud (secrets available)
+# Check if running in Streamlit Cloud (secrets) or Vercel (env vars)
 try:
-    API_URL = st.secrets["API_URL"]
-except:
-    API_URL = "http://127.0.0.1:8000"
+    if "API_URL" in st.secrets:
+        API_URL = st.secrets["API_URL"]
+    elif os.getenv("API_URL"):
+        API_URL = os.getenv("API_URL")
+    else:
+        API_URL = "http://127.0.0.1:8000"
+except FileNotFoundError:
+    # st.secrets might raise FileNotFoundError locally if .streamlit/secrets.toml doesn't exist
+    if os.getenv("API_URL"):
+        API_URL = os.getenv("API_URL")
+    else:
+        API_URL = "http://127.0.0.1:8000"
+except Exception:
+    # Fallback for any other access issues
+    if os.getenv("API_URL"):
+        API_URL = os.getenv("API_URL")
+    else:
+        API_URL = "http://127.0.0.1:8000"
 USER_ID = "guest_streamlit"  # Fixed user for demo
 
 # -----------------------------------------------------------------------------
@@ -58,26 +73,93 @@ st.markdown("""
 
     /* Global Overrides for Streamlit to Match React App Layout */
     .stApp {
-        background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); /* "Rare Wind" - Attractive Aqua to Soft Pink */
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
         font-family: 'Inter', sans-serif;
-        color: var(--text-main);
+        color: #1a202c; /* Ensure dark text for readability */
     }
     
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
     /* Header & Footer Customization */
     /* Hide the standard Streamlit header elements (hamburger menu, deploy button) */
+    /* Header & Footer Customization */
+    /* Header & Footer Customization */
+    /* Headers - Make transparent but keep structure */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
+
+    /* Toolbar - Hide specific items but keep container if needed for spacing */
     [data-testid="stToolbar"] {
-        visibility: hidden;
+        right: 2rem;
+        background: transparent !important;
     }
     
-    /* Hide the decoration (rainbow line) */
+    /* Hide specific toolbar items we don't want (like the deploy button/running man if desired, 
+       but keeping them visible is safer for now to ensure we don't accidentally hide the toggle if it lives there) */
+    
+    /* Decoration line */
     [data-testid="stDecoration"] {
         display: none;
     }
-    
-    /* Ensure Sidebar Toggle (collapsedControl) is visible even if we hide other things */
+
+    /* The Sidebar Toggle Button (> or x) */
+    /* The Sidebar Toggle Button (> or x) */
     [data-testid="collapsedControl"] {
-        visibility: visible;
-        color: #0F172A;
+        display: flex !important;
+        visibility: visible !important;
+        color: #ffffff !important;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        backdrop-filter: blur(8px);
+        border-radius: 50% !important;
+        border: 2px solid rgba(255,255,255,0.5) !important;
+        z-index: 1000000 !important; /* Higher than anything else */
+        position: fixed !important;
+        top: 24px !important;
+        left: 120px !important;     /* Moved forward by ~1 inch (was 32px) */
+        width: 60px !important;
+        height: 60px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transform: none !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+    }
+
+    [data-testid="collapsedControl"]:hover {
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
+        transform: scale(1.1) !important;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important;
+        color: #ffffff !important;
+    }
+    /* The following block was a duplicate and has been removed to avoid conflicts */
+    /*
+        z-index: 999999 !important;
+        position: fixed !important;
+        top: 20px !important;
+        left: 20px !important;
+        background-color: rgba(255, 255, 255, 0.8) !important;
+        backdrop-filter: blur(4px);
+        border-radius: 50% !important;
+        width: 40px !important;
+        height: 40px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        transition: all 0.3s ease !important;
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    [data-testid="collapsedControl"]:hover {
+        background-color: #FFFFFF !important;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
+        transform: scale(1.1);
+        color: #2CA4B0 !important;
     }
 
     #MainMenu {visibility: hidden;}
@@ -114,13 +196,14 @@ st.markdown("""
     }
 
     .welcome-card {
-        max-width: 42rem;
+        max-width: 38rem; /* Reduced width */
         width: 100%;
-        background: #FFFFFF;
-        padding: 2rem;
+        background: rgba(255, 255, 255, 0.65); /* Uniform Light Glass */
+        backdrop-filter: blur(12px);
+        padding: 1.5rem; /* Reduced padding */
         border-radius: 1.5rem;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-        border: 1px solid #E2E8F0;
+        border: 1px solid rgba(255, 255, 255, 0.6);
         margin-bottom: 2rem;
         position: relative;
         z-index: 10;
@@ -230,11 +313,11 @@ st.markdown("""
     /* Chat Styling */
     .chat-container {
         padding: 2.5rem;
-        background: rgba(255, 255, 255, 0.85); /* Slightly more opaque for readability */
+        background: rgba(255, 255, 255, 0.95); /* More opaque */
         border-radius: 1.5rem;
         backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.6);
-        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1); /* Glassmorphism Shadow */
+        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1); 
         margin-top: 1rem;
     }
 
@@ -348,79 +431,68 @@ st.markdown("""
 <style>
     /* Sidebar Container Override */
     section[data-testid="stSidebar"] {
-        background-color: rgba(255, 255, 255, 0.85);
+        background: linear-gradient(180deg, #A8EDEA 0%, #FED6E3 100%); /* "Soft Teal to Pink" - Matching Main Page */
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255, 255, 255, 0.6);
-        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.03);
+        border-right: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.05);
     }
     
     /* Hide Radio Buttons default circles */
     div[role="radiogroup"] > label > div:first-of-type {
-        display: none;
+        display: none !important;
     }
     
     /* Style Radio Labels as Navigation Links */
     div[role="radiogroup"] {
-        gap: 12px;
-        display: flex;
-        flex-direction: column;
-        padding-top: 1rem;
+        gap: 12px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding-top: 1.5rem !important;
+        background: transparent !important;
     }
     
     div[role="radiogroup"] label {
-        display: flex;
-        align-items: center;
-        width: 100%;
-        padding: 12px 18px;
-        border-radius: 16px;
-        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        border: 1px solid transparent;
-        color: #64748B;
-        font-weight: 600;
-        cursor: pointer;
-        background: transparent;
-        position: relative;
-        overflow: hidden;
+        display: flex !important;
+        align-items: center !important;
+        width: 100% !important;
+        padding: 12px 18px !important;
+        border-radius: 16px !important;
+        transition: all 0.3s ease !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        color: #475569 !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        background: rgba(255, 255, 255, 0.4) !important;
+        margin-bottom: 6px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
     }
     
     div[role="radiogroup"] label:hover {
-        background-color: rgba(255, 255, 255, 0.8);
-        color: #2CA4B0;
-        transform: translateX(5px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        color: #2CA4B0 !important;
+        transform: translateX(6px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important;
     }
     
     /* Active State Styling */
     div[role="radiogroup"] label[data-checked="true"] {
-        background: linear-gradient(135deg, rgba(44, 164, 176, 0.15), rgba(44, 164, 176, 0.05));
-        color: #0E7490;
-        border: 1px solid rgba(44, 164, 176, 0.2);
-        box-shadow: 0 4px 15px rgba(44, 164, 176, 0.1);
+        background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%) !important; /* "Warm Peach" Gradient */
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 15px rgba(255, 154, 158, 0.4) !important;
     }
     
-    div[role="radiogroup"] label[data-checked="true"]::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 4px;
-        background: #2CA4B0;
-        border-radius: 0 4px 4px 0;
-    }
-    
+    /* TEXT Inside Radio - Ensure it inherits color correctly */
     div[role="radiogroup"] label[data-checked="true"] p {
-        color: #0E7490 !important;
-        font-weight: 800 !important;
-        letter-spacing: 0.02em;
+        color: white !important;
     }
     
-    div[role="radiogroup"] label p {
+    /* Text Styling inside Radio */
+    div[role="radiogroup"] label * {
+        font-family: 'Outfit', sans-serif !important;
         font-size: 1rem !important;
-        font-family: 'Inter', sans-serif !important;
-        margin: 0; 
-        line-height: 1.5;
+        letter-spacing: 0.02em;
     }
 
     /* Logo Container Styling */
@@ -569,9 +641,10 @@ if st.session_state.page == "Home":
 # VIEW: CHAT
 # -----------------------------------------------------------------------------
 elif st.session_state.page == "Chat":
-    # Chat Container Wrapper
-    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    # Move Header OUTSIDE container to remove "box above"
     st.markdown("<h2 style='text-align: center; color: #1E293B; margin-bottom: 2rem;'>How are you feeling today?</h2>", unsafe_allow_html=True)
+    
+    # Removed chat-container wrapper
     
     c_pad1, c_main, c_pad2 = st.columns([1, 6, 1])
     
@@ -610,13 +683,19 @@ elif st.session_state.page == "Chat":
                 except Exception as e:
                     st.error(f"Connection failed: {e}")
     
-    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # st.markdown('</div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
 # VIEW: HISTORY
 # -----------------------------------------------------------------------------
 elif st.session_state.page == "History":
-    st.markdown("### Past Conversations")
+    st.markdown("""
+        <div style='background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(12px); padding: 1.5rem; border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.6); margin-bottom: 2rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); text-align: center; max-width: 38rem; margin-left: auto; margin-right: auto;'>
+            <h2 style='color: #1E293B; margin: 0; font-family: Outfit, sans-serif; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em;'>Past Conversations</h2>
+            <p style='color: #475569; margin-top: 0.5rem; font-size: 1rem; font-weight: 500;'>Review your journey and track your mental well-being over time.</p>
+        </div>
+    """, unsafe_allow_html=True)
     
     try:
         res = requests.get(f"{API_URL}/history/{USER_ID}")
@@ -625,7 +704,7 @@ elif st.session_state.page == "History":
             
             # Header
             st.markdown("""
-            <div style="display: flex; padding: 0 1.5rem; font-size: 0.8rem; color: #94A3B8; font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem;">
+            <div style="display: flex; padding: 1rem; border-radius: 12px; font-size: 0.85rem; color: #1e293b; font-weight: 700; text-transform: uppercase; margin-bottom: 1rem; background: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.5);">
                 <div style="width: 20%;">Date & Time</div>
                 <div style="width: 45%;">Message</div>
                 <div style="width: 20%; text-align: center;">Anxiety Level</div>
@@ -673,7 +752,12 @@ elif st.session_state.page == "History":
 # VIEW: INSIGHTS
 # -----------------------------------------------------------------------------
 elif st.session_state.page == "Insights":
-    st.markdown("### Anxiety Trends")
+    st.markdown("""
+        <div style='background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(12px); padding: 1.5rem; border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.6); margin-bottom: 2rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); text-align: center; max-width: 38rem; margin-left: auto; margin-right: auto;'>
+            <h2 style='color: #1E293B; margin: 0; font-family: Outfit, sans-serif; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em;'>Anxiety Trends</h2>
+            <p style='color: #475569; margin-top: 0.5rem; font-size: 1rem; font-weight: 500;'>Visualizing your emotional data to help you understand patterns.</p>
+        </div>
+    """, unsafe_allow_html=True)
     
     try:
         res = requests.get(f"{API_URL}/get_insights/{USER_ID}")
@@ -689,7 +773,7 @@ elif st.session_state.page == "Insights":
                 "Count": [low, mod, high]
             })
             
-            st.bar_chart(chart_data, x="Anxiety Level", y="Count", color="#2CA4B0")
+            st.bar_chart(chart_data, x="Anxiety Level", y="Count", color="#AED9E0") # Softer Pastel Teal
             
             st.markdown("<br>", unsafe_allow_html=True)
             

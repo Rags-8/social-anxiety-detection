@@ -12,6 +12,12 @@ echo [INFO] Installing/Updating Streamlit dependencies...
 pip install streamlit requests
 
 echo.
+echo [INFO] Starting Backend Server...
+start "Backend Server" cmd /k "python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000"
+
+timeout /t 5 /nobreak >nul
+
+echo.
 echo [INFO] Launching Streamlit...
 start http://localhost:8501
 python -m streamlit run streamlit_app.py --server.headless true
