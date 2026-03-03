@@ -18,7 +18,7 @@ const History = () => {
 
     const fetchHistory = async () => {
         try {
-            const response = await axios.get('http://localhost:8001/history');
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/history`);
             setHistory(response.data);
         } catch (error) {
             console.error("Error fetching history:", error);
@@ -35,7 +35,7 @@ const History = () => {
         if (!window.confirm("Are you sure you want to delete this conversation?")) return;
 
         try {
-            await axios.delete(`http://localhost:8001/history/${id}`);
+            await axios.delete(`${import.meta.env.VITE_API_URL}/history/${id}`);
             setHistory(history.filter(item => item.id !== id));
         } catch (error) {
             console.error("Error deleting item:", error);

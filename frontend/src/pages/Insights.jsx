@@ -10,7 +10,7 @@ const Insights = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await axios.get('http://localhost:8001/insights');
+                const response = await axios.get(`${import.meta.env.VITE_API_URL}/insights`);
                 const distribution = response.data.anxiety_distribution;
 
                 // Transform data for chart

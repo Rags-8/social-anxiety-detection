@@ -26,7 +26,7 @@ const Chat = () => {
         setIsLoading(true);
 
         try {
-            const response = await axios.post('http://localhost:8001/analyze', { text: userMsg });
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/analyze`, { text: userMsg });
             setMessages(prev => [...prev, {
                 role: 'bot',
                 text: response.data.explanation,
@@ -92,8 +92,8 @@ const Chat = () => {
                                         <div className="flex items-center justify-between">
                                             <span className="text-[0.6rem] font-black uppercase tracking-widest text-[#94ADB8]">Analysis</span>
                                             <span className={`px-3 py-1 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${msg.data.anxiety_level === 'High' ? 'bg-[#587584]/20 text-[#1a365d]' :
-                                                    msg.data.anxiety_level === 'Moderate' ? 'bg-[#94ADB8]/20 text-[#587584]' :
-                                                        'bg-[#B2C9D8]/20 text-[#587584]'
+                                                msg.data.anxiety_level === 'Moderate' ? 'bg-[#94ADB8]/20 text-[#587584]' :
+                                                    'bg-[#B2C9D8]/20 text-[#587584]'
                                                 }`}>
                                                 {msg.data.anxiety_level} Anxiety
                                             </span>
