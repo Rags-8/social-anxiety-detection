@@ -36,23 +36,23 @@ def analyze_text(request: AnalysisRequest):
     if not result:
         raise HTTPException(status_code=500, detail="Model not loaded or error in analysis")
 
-    # Save to PostgreSQL
+    # Save to SQLite
     try:
         conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO conversations (user_text, anxiety_level, sentiment_score, suggestions, timestamp)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (
-                    request.text,
-                    result["anxiety_level"],
-                    result["sentiment_score"],
-                    result["suggestions"],  # Constant list/array for TEXT[]
-                    datetime.utcnow()
-                )
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO conversations (user_text, anxiety_level, sentiment_score, suggestions, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                request.text,
+                result["anxiety_level"],
+                result["sentiment_score"],
+                json.dumps(result["suggestions"]),
+                datetime.utcnow().isoformat()
             )
+        )
         conn.commit()
         conn.close()
     except Exception as e:
@@ -66,18 +66,15 @@ def analyze_text(request: AnalysisRequest):
         confidence=result["confidence"]
     )
 
-from fastapi.responses import JSONResponse
-import json
-
 @app.get("/history")
 def get_history():
     try:
         conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, user_text, anxiety_level, sentiment_score, suggestions, timestamp FROM conversations ORDER BY timestamp DESC LIMIT 50"
-            )
-            rows = cur.fetchall()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, user_text, anxiety_level, sentiment_score, suggestions, timestamp FROM conversations ORDER BY timestamp DESC LIMIT 50"
+        )
+        rows = cur.fetchall()
         conn.close()
         return [
             {
@@ -85,8 +82,8 @@ def get_history():
                 "user_text": row[1],
                 "anxiety_level": row[2],
                 "sentiment_score": row[3],
-                "suggestions": json.loads(row[4]) if isinstance(row[4], str) else (row[4] or []),
-                "timestamp": row[5].isoformat() if hasattr(row[5], 'isoformat') else str(row[5])
+                "suggestions": json.loads(row[4]) if row[4] else [],
+                "timestamp": row[5]
             }
             for row in rows
         ]
@@ -98,15 +95,15 @@ def get_history():
 def get_insights():
     try:
         conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT anxiety_level, COUNT(*) as count, AVG(sentiment_score) as avg_sentiment
-                FROM conversations
-                GROUP BY anxiety_level
-                """
-            )
-            rows = cur.fetchall()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT anxiety_level, COUNT(*) as count, AVG(sentiment_score) as avg_sentiment
+            FROM conversations
+            GROUP BY anxiety_level
+            """
+        )
+        rows = cur.fetchall()
         conn.close()
         return {
             "anxiety_distribution": [
@@ -122,8 +119,8 @@ def get_insights():
 def delete_history_item(item_id: int):
     try:
         conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM conversations WHERE id = %s", (item_id,))
+        cur = conn.cursor()
+        cur.execute("DELETE FROM conversations WHERE id = ?", (item_id,))
         conn.commit()
         conn.close()
         return {"message": "Item deleted successfully"}
