@@ -44,7 +44,7 @@ const Chat = () => {
     };
 
     return (
-        <div className="flex flex-col h-screen max-w-5xl mx-auto px-4 relative">
+        <div className="flex flex-col h-full overflow-hidden max-w-5xl mx-auto px-4 relative">
             {/* Header Area */}
             <div className="py-6 flex flex-col items-center flex-shrink-0">
                 <h1 className="text-2xl font-black text-[#1a365d]">
@@ -91,12 +91,19 @@ const Chat = () => {
                                     <div className="bg-white/40 backdrop-blur-sm rounded-[2rem] p-6 border border-white/20 space-y-6 mt-2 ml-2">
                                         <div className="flex items-center justify-between">
                                             <span className="text-[0.6rem] font-black uppercase tracking-widest text-[#94ADB8]">Analysis</span>
-                                            <span className={`px-3 py-1 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${msg.data.anxiety_level === 'High' ? 'bg-[#587584]/20 text-[#1a365d]' :
-                                                msg.data.anxiety_level === 'Moderate' ? 'bg-[#94ADB8]/20 text-[#587584]' :
-                                                    'bg-[#B2C9D8]/20 text-[#587584]'
-                                                }`}>
-                                                {msg.data.anxiety_level} Anxiety
-                                            </span>
+                                            <div className="flex gap-2">
+                                                <span className={`px-3 py-1 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${msg.data.anxiety_level === 'High' ? 'bg-[#587584]/20 text-[#1a365d]' :
+                                                    msg.data.anxiety_level === 'Moderate' ? 'bg-[#94ADB8]/20 text-[#587584]' :
+                                                        'bg-[#B2C9D8]/20 text-[#587584]'
+                                                    }`}>
+                                                    {msg.data.anxiety_level} Anxiety
+                                                </span>
+                                                {msg.data.confidence !== undefined && (
+                                                    <span className="px-3 py-1 rounded-full text-[0.6rem] font-black tracking-widest uppercase bg-white/60 text-[#587584] border border-white/40 shadow-sm">
+                                                        {msg.data.confidence.toFixed(1)}% Conf
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
 
                                         {msg.data.suggestions && (

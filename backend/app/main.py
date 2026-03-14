@@ -13,7 +13,7 @@ app = FastAPI()
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,6 +40,13 @@ def analyze_text(request: AnalysisRequest):
     try:
         conn = get_connection()
         cur = conn.cursor()
+        
+        # We smartly encode 'confidence' inside 'suggestions' to avoid modifying the DB schema
+        suggestions_payload = {
+            "list": result["suggestions"],
+            "confidence": result.get("confidence", 0.0)
+        }
+        
         cur.execute(
             """
             INSERT INTO conversations (user_text, anxiety_level, sentiment_score, suggestions, timestamp)
@@ -49,8 +56,8 @@ def analyze_text(request: AnalysisRequest):
                 request.text,
                 result["anxiety_level"],
                 result["sentiment_score"],
-                json.dumps(result["suggestions"]),
-                datetime.utcnow().isoformat()
+                json.dumps(suggestions_payload),
+                datetime.now().isoformat() # Use local time as requested
             )
         )
         conn.commit()
@@ -61,7 +68,7 @@ def analyze_text(request: AnalysisRequest):
     return AnalysisResponse(
         anxiety_level=result["anxiety_level"],
         sentiment_score=result["sentiment_score"],
-        explanation=f"Detected anxiety level: {result['anxiety_level']}",
+        explanation=result.get("explanation", f"Detected anxiety level: {result['anxiety_level']}"),
         suggestions=result["suggestions"],
         confidence=result["confidence"]
     )
@@ -76,17 +83,30 @@ def get_history():
         )
         rows = cur.fetchall()
         conn.close()
-        return [
-            {
+        history_response = []
+        for row in rows:
+            try:
+                suggestions_data = json.loads(row[4]) if row[4] else []
+                if isinstance(suggestions_data, dict):
+                    suggestions_list = suggestions_data.get("list", [])
+                    confidence_score = suggestions_data.get("confidence", 0.0)
+                else:
+                    suggestions_list = suggestions_data
+                    confidence_score = 0.0
+            except:
+                suggestions_list = []
+                confidence_score = 0.0
+
+            history_response.append({
                 "id": row[0],
                 "user_text": row[1],
                 "anxiety_level": row[2],
                 "sentiment_score": row[3],
-                "suggestions": json.loads(row[4]) if row[4] else [],
+                "suggestions": suggestions_list,
+                "confidence": confidence_score,
                 "timestamp": row[5]
-            }
-            for row in rows
-        ]
+            })
+        return history_response
     except Exception as e:
         print(f"Error fetching history: {e}")
         return []
@@ -96,24 +116,57 @@ def get_insights():
     try:
         conn = get_connection()
         cur = conn.cursor()
+        # 1. Bar Chart Data (確保 High, Moderate, Low 都有)
         cur.execute(
             """
-            SELECT anxiety_level, COUNT(*) as count, AVG(sentiment_score) as avg_sentiment
+            SELECT anxiety_level, COUNT(*) as count
             FROM conversations
+            WHERE anxiety_level IN ('High', 'Moderate', 'Low')
             GROUP BY anxiety_level
             """
         )
-        rows = cur.fetchall()
+        dist_rows = cur.fetchall()
+        
+        # 2. Line Chart Data (Trend over time by day)
+        cur.execute(
+            """
+            SELECT date(timestamp) as day, anxiety_level, COUNT(*) as count
+            FROM conversations
+            WHERE anxiety_level IN ('High', 'Moderate', 'Low')
+            GROUP BY date(timestamp), anxiety_level
+            ORDER BY date(timestamp) ASC
+            """
+        )
+        trend_rows = cur.fetchall()
         conn.close()
+        
+        # Ensure all categories exist in distribution
+        dist_dict = {"High": 0, "Moderate": 0, "Low": 0}
+        for level, count in dist_rows:
+            dist_dict[level] = count
+            
+        anxiety_distribution = [
+            {"_id": level, "count": count}
+            for level, count in dist_dict.items()
+        ]
+        
+        # Process Timeline
+        timeline_dict = {}
+        for row in trend_rows:
+            day, level, count = row
+            if day not in timeline_dict:
+                timeline_dict[day] = {"date": day, "Low": 0, "Moderate": 0, "High": 0}
+            timeline_dict[day][level] = count
+            
+        timeline = list(timeline_dict.values())
+
         return {
-            "anxiety_distribution": [
-                {"_id": row[0], "count": row[1], "avg_sentiment": row[2]}
-                for row in rows
-            ]
+            "anxiety_distribution": anxiety_distribution,
+            "timeline": timeline
         }
     except Exception as e:
         print(f"Error fetching insights: {e}")
-        return {"anxiety_distribution": []}
+        return {"anxiety_distribution": [], "timeline": []}
 
 @app.delete("/history/{item_id}")
 def delete_history_item(item_id: int):

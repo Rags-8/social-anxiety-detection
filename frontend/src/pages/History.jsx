@@ -88,13 +88,18 @@ const History = () => {
                         >
                             {item.user_text}
                         </div>
-                        <div className="w-1/4 flex justify-end pt-1">
+                        <div className="w-1/4 flex flex-col items-end pt-1">
                             <span className={`px-4 py-1.5 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${item.anxiety_level === 'High' ? 'bg-[#587584]/15 text-[#1a365d]' :
                                 item.anxiety_level === 'Moderate' ? 'bg-[#94ADB8]/15 text-[#587584]' :
                                     'bg-[#B2C9D8]/15 text-[#587584]'
                                 }`}>
                                 {item.anxiety_level}
                             </span>
+                            {item.confidence > 0 && (
+                                <span className="text-[0.6rem] font-bold text-gray-400 mt-1 mr-2">
+                                    {item.confidence.toFixed(1)}% CONFIDENCE
+                                </span>
+                            )}
                         </div>
                         <div className="w-[80px] flex justify-end pt-0.5">
                             <button
