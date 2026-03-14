@@ -10,10 +10,10 @@ import json
 
 app = FastAPI()
 
-# CORS
+# CORS - Allow all origins for production compatibility
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -183,4 +183,6 @@ def delete_history_item(item_id: int):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
+    import os
+    port = int(os.environ.get("PORT", 8001))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False if os.environ.get("PORT") else True)

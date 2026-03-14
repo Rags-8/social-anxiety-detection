@@ -9,7 +9,8 @@ console.log('\x1b[36m%s\x1b[0m', 'Starting Social Anxiety Backend...');
 console.log('\x1b[33m%s\x1b[0m', 'Running at this portal: http://localhost:8001');
 
 // Execute the Python command with -u for unbuffered output
-const pythonProcess = spawn('python', ['-u', '-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8001', '--reload'], {
+const port = process.env.PORT || '8001';
+const pythonProcess = spawn('python', ['-u', '-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', port, '--reload'], {
     shell: true
 });
 
