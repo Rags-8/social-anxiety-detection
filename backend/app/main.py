@@ -36,31 +36,32 @@ def analyze_text(request: AnalysisRequest):
     if not result:
         raise HTTPException(status_code=500, detail="Model not loaded or error in analysis")
 
-    # Save to SQLite
+    # Save to PostgreSQL
     try:
         conn = get_connection()
         cur = conn.cursor()
-        
-        # We smartly encode 'confidence' inside 'suggestions' to avoid modifying the DB schema
+
         suggestions_payload = {
             "list": result["suggestions"],
             "confidence": result.get("confidence", 0.0)
         }
-        
+
+        # PostgreSQL uses %s placeholders (not ? like SQLite)
         cur.execute(
             """
             INSERT INTO conversations (user_text, anxiety_level, sentiment_score, suggestions, timestamp)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (
                 request.text,
                 result["anxiety_level"],
                 result["sentiment_score"],
                 json.dumps(suggestions_payload),
-                datetime.now().isoformat() # Use local time as requested
+                datetime.now().isoformat()
             )
         )
         conn.commit()
+        cur.close()
         conn.close()
     except Exception as e:
         print(f"Error saving to DB: {e}")
@@ -78,15 +79,18 @@ def get_history():
     try:
         conn = get_connection()
         cur = conn.cursor()
+        # PostgreSQL dict cursor returns rows as dicts
         cur.execute(
             "SELECT id, user_text, anxiety_level, sentiment_score, suggestions, timestamp FROM conversations ORDER BY timestamp DESC LIMIT 50"
         )
         rows = cur.fetchall()
+        cur.close()
         conn.close()
+
         history_response = []
         for row in rows:
             try:
-                suggestions_data = json.loads(row[4]) if row[4] else []
+                suggestions_data = json.loads(row["suggestions"]) if row["suggestions"] else []
                 if isinstance(suggestions_data, dict):
                     suggestions_list = suggestions_data.get("list", [])
                     confidence_score = suggestions_data.get("confidence", 0.0)
@@ -97,14 +101,19 @@ def get_history():
                 suggestions_list = []
                 confidence_score = 0.0
 
+            # Convert timestamp to string if it's a datetime object
+            ts = row["timestamp"]
+            if hasattr(ts, 'isoformat'):
+                ts = ts.isoformat()
+
             history_response.append({
-                "id": row[0],
-                "user_text": row[1],
-                "anxiety_level": row[2],
-                "sentiment_score": row[3],
+                "id": row["id"],
+                "user_text": row["user_text"],
+                "anxiety_level": row["anxiety_level"],
+                "sentiment_score": row["sentiment_score"],
                 "suggestions": suggestions_list,
                 "confidence": confidence_score,
-                "timestamp": row[5]
+                "timestamp": ts
             })
         return history_response
     except Exception as e:
@@ -116,7 +125,8 @@ def get_insights():
     try:
         conn = get_connection()
         cur = conn.cursor()
-        # 1. Bar Chart Data (確保 High, Moderate, Low 都有)
+
+        # 1. Distribution counts
         cur.execute(
             """
             SELECT anxiety_level, COUNT(*) as count
@@ -126,38 +136,41 @@ def get_insights():
             """
         )
         dist_rows = cur.fetchall()
-        
-        # 2. Line Chart Data (Trend over time by day)
+
+        # 2. Timeline by day
         cur.execute(
             """
-            SELECT date(timestamp) as day, anxiety_level, COUNT(*) as count
+            SELECT DATE(timestamp) as day, anxiety_level, COUNT(*) as count
             FROM conversations
             WHERE anxiety_level IN ('High', 'Moderate', 'Low')
-            GROUP BY date(timestamp), anxiety_level
-            ORDER BY date(timestamp) ASC
+            GROUP BY DATE(timestamp), anxiety_level
+            ORDER BY DATE(timestamp) ASC
             """
         )
         trend_rows = cur.fetchall()
+        cur.close()
         conn.close()
-        
-        # Ensure all categories exist in distribution
+
+        # Ensure all categories exist
         dist_dict = {"High": 0, "Moderate": 0, "Low": 0}
-        for level, count in dist_rows:
-            dist_dict[level] = count
-            
+        for row in dist_rows:
+            dist_dict[row["anxiety_level"]] = row["count"]
+
         anxiety_distribution = [
             {"_id": level, "count": count}
             for level, count in dist_dict.items()
         ]
-        
-        # Process Timeline
+
+        # Process timeline
         timeline_dict = {}
         for row in trend_rows:
-            day, level, count = row
+            day = str(row["day"])
+            level = row["anxiety_level"]
+            count = row["count"]
             if day not in timeline_dict:
                 timeline_dict[day] = {"date": day, "Low": 0, "Moderate": 0, "High": 0}
             timeline_dict[day][level] = count
-            
+
         timeline = list(timeline_dict.values())
 
         return {
@@ -173,8 +186,9 @@ def delete_history_item(item_id: int):
     try:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute("DELETE FROM conversations WHERE id = ?", (item_id,))
+        cur.execute("DELETE FROM conversations WHERE id = %s", (item_id,))
         conn.commit()
+        cur.close()
         conn.close()
         return {"message": "Item deleted successfully"}
     except Exception as e:
