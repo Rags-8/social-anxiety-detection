@@ -5,7 +5,7 @@ from typing import List
 from datetime import datetime
 from .database import get_connection, init_db
 from .models import AnalysisRequest, AnalysisResponse, ConversationModel
-from .ml_utils import analyze_anxiety
+from .ml_utils import analyze_anxiety, start_model_preload
 import json
 
 app = FastAPI()
@@ -25,6 +25,8 @@ def startup_event():
         init_db()
     except Exception as e:
         print(f"Warning: Database init failed at startup: {e}. Continuing without DB.")
+    # Pre-load ML models in background so first request isn't slow
+    start_model_preload()
 
 @app.get("/")
 def read_root():
