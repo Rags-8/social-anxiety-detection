@@ -3,9 +3,10 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from datetime import datetime
-from .database import get_connection, init_db
+from .database import init_db
 from .models import AnalysisRequest, AnalysisResponse, ConversationModel
 from .ml_utils import analyze_anxiety, start_model_preload
+from .supabase_client import supabase
 import json
 
 app = FastAPI()
@@ -21,10 +22,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
-    try:
-        init_db()
-    except Exception as e:
-        print(f"Warning: Database init failed at startup: {e}. Continuing without DB.")
+    init_db()
     # Pre-load ML models in background so first request isn't slow
     start_model_preload()
 
@@ -38,33 +36,24 @@ def analyze_text(request: AnalysisRequest):
     if not result:
         raise HTTPException(status_code=500, detail="Model not loaded or error in analysis")
 
-    # Save to PostgreSQL
+    # Save to Supabase via REST API
     try:
-        conn = get_connection()
-        cur = conn.cursor()
-
         suggestions_payload = {
             "list": result["suggestions"],
             "confidence": result.get("confidence", 0.0)
         }
 
-        # PostgreSQL uses %s placeholders (not ? like SQLite)
-        cur.execute(
-            """
-            INSERT INTO conversations (user_text, anxiety_level, sentiment_score, suggestions, timestamp)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (
-                request.text,
-                result["anxiety_level"],
-                result["sentiment_score"],
-                json.dumps(suggestions_payload),
-                datetime.now().isoformat()
-            )
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
+        data = {
+            "user_text": request.text,
+            "anxiety_level": result["anxiety_level"],
+            "sentiment_score": result["sentiment_score"],
+            "suggestions": json.dumps(suggestions_payload),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # supabase.table().insert() returns data on success
+        supabase.table("conversations").insert(data).execute()
+        
     except Exception as e:
         print(f"Error saving to DB: {e}")
 
@@ -79,20 +68,14 @@ def analyze_text(request: AnalysisRequest):
 @app.get("/history")
 def get_history():
     try:
-        conn = get_connection()
-        cur = conn.cursor()
-        # PostgreSQL dict cursor returns rows as dicts
-        cur.execute(
-            "SELECT id, user_text, anxiety_level, sentiment_score, suggestions, timestamp FROM conversations ORDER BY timestamp DESC LIMIT 50"
-        )
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
+        # Fetch the latest 50 conversations via Supabase REST API
+        response = supabase.table("conversations").select("*").order("timestamp", desc=True).limit(50).execute()
+        rows = response.data
 
         history_response = []
         for row in rows:
             try:
-                suggestions_data = json.loads(row["suggestions"]) if row["suggestions"] else []
+                suggestions_data = json.loads(row["suggestions"]) if row.get("suggestions") else []
                 if isinstance(suggestions_data, dict):
                     suggestions_list = suggestions_data.get("list", [])
                     confidence_score = suggestions_data.get("confidence", 0.0)
@@ -103,11 +86,6 @@ def get_history():
                 suggestions_list = []
                 confidence_score = 0.0
 
-            # Convert timestamp to string if it's a datetime object
-            ts = row["timestamp"]
-            if hasattr(ts, 'isoformat'):
-                ts = ts.isoformat()
-
             history_response.append({
                 "id": row["id"],
                 "user_text": row["user_text"],
@@ -115,7 +93,7 @@ def get_history():
                 "sentiment_score": row["sentiment_score"],
                 "suggestions": suggestions_list,
                 "confidence": confidence_score,
-                "timestamp": ts
+                "timestamp": row["timestamp"]
             })
         return history_response
     except Exception as e:
@@ -125,55 +103,35 @@ def get_history():
 @app.get("/insights")
 def get_insights():
     try:
-        conn = get_connection()
-        cur = conn.cursor()
+        # Fetch all recent (e.g. last 1000) conversations to aggregate locally
+        # Since Supabase standard REST API doesn't easily support raw GROUP BY SQL
+        response = supabase.table("conversations").select("anxiety_level, timestamp").order("timestamp", desc=True).limit(1000).execute()
+        rows = response.data
 
-        # 1. Distribution counts
-        cur.execute(
-            """
-            SELECT anxiety_level, COUNT(*) as count
-            FROM conversations
-            WHERE anxiety_level IN ('High', 'Moderate', 'Low')
-            GROUP BY anxiety_level
-            """
-        )
-        dist_rows = cur.fetchall()
-
-        # 2. Timeline by day
-        cur.execute(
-            """
-            SELECT DATE(timestamp) as day, anxiety_level, COUNT(*) as count
-            FROM conversations
-            WHERE anxiety_level IN ('High', 'Moderate', 'Low')
-            GROUP BY DATE(timestamp), anxiety_level
-            ORDER BY DATE(timestamp) ASC
-            """
-        )
-        trend_rows = cur.fetchall()
-        cur.close()
-        conn.close()
-
-        # Ensure all categories exist
+        # 1. Distribution counts & 2. Timeline by day
         dist_dict = {"High": 0, "Moderate": 0, "Low": 0}
-        for row in dist_rows:
-            dist_dict[row["anxiety_level"]] = row["count"]
+        timeline_dict = {}
+
+        for row in rows:
+            level = row["anxiety_level"]
+            if level in dist_dict:
+                dist_dict[level] += 1
+            
+            # Format day as YYYY-MM-DD
+            if row.get("timestamp"):
+                day = row["timestamp"].split("T")[0]
+                if day not in timeline_dict:
+                    timeline_dict[day] = {"date": day, "Low": 0, "Moderate": 0, "High": 0}
+                if level in timeline_dict[day]:
+                    timeline_dict[day][level] += 1
 
         anxiety_distribution = [
             {"_id": level, "count": count}
             for level, count in dist_dict.items()
         ]
 
-        # Process timeline
-        timeline_dict = {}
-        for row in trend_rows:
-            day = str(row["day"])
-            level = row["anxiety_level"]
-            count = row["count"]
-            if day not in timeline_dict:
-                timeline_dict[day] = {"date": day, "Low": 0, "Moderate": 0, "High": 0}
-            timeline_dict[day][level] = count
-
-        timeline = list(timeline_dict.values())
+        # Sort timeline by date ascending for charts
+        timeline = sorted(list(timeline_dict.values()), key=lambda x: x["date"])
 
         return {
             "anxiety_distribution": anxiety_distribution,
@@ -186,12 +144,7 @@ def get_insights():
 @app.delete("/history/{item_id}")
 def delete_history_item(item_id: int):
     try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM conversations WHERE id = %s", (item_id,))
-        conn.commit()
-        cur.close()
-        conn.close()
+        supabase.table("conversations").delete().eq("id", item_id).execute()
         return {"message": "Item deleted successfully"}
     except Exception as e:
         print(f"Error deleting history item: {e}")
