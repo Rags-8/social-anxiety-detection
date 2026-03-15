@@ -12,3 +12,4 @@ torch
 transformers
 accelerate
 google-generativeai
+sentence-transformers
