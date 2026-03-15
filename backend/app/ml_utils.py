@@ -3,42 +3,55 @@ import re
 import pickle
 import random
 import nltk
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-import google.generativeai as genai
 from dotenv import load_dotenv
 from textblob import TextBlob
 from sentence_transformers import SentenceTransformer
+
+# Use the new google.genai SDK
+try:
+    from google import genai as google_genai
+    from google.genai import types as genai_types
+except ImportError:
+    google_genai = None
+    genai_types = None
 
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here":
+gemini_client = None
+if google_genai and GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here":
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        # Use gemini-flash-latest which appeared in the model list
-        gemini_model = genai.GenerativeModel('gemini-flash-latest')
-        print("Gemini API configured successfully.")
+        gemini_client = google_genai.Client(api_key=GEMINI_API_KEY)
+        print("Gemini API (google.genai) configured successfully.")
     except Exception as e:
         print(f"Error configuring Gemini API: {e}")
-        gemini_model = None
+        gemini_client = None
 else:
     print("Warning: GEMINI_API_KEY not found or default. Gemini analysis will be skipped.")
-    gemini_model = None
 
 # Lazy-load artifacts (avoids blocking uvicorn port binding on Render)
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml_models", "anxiety_model.pkl")
 
 model = None
 embedder = None
+lemmatizer = None
+stop_words = None
 
 def _load_models():
-    """Load ML models on first use (lazy loading) to avoid startup timeout."""
-    global model, embedder
+    """Load ML models and NLTK data on first use (lazy loading) to avoid startup timeout."""
+    global model, embedder, lemmatizer, stop_words
     if model is not None and embedder is not None:
         return True
     try:
+        # Initialize NLTK lazily (avoids blocking port bind at import time)
+        from nltk.corpus import stopwords as nltk_stopwords
+        from nltk.stem import WordNetLemmatizer
+        nltk.download('stopwords', quiet=True)
+        nltk.download('wordnet', quiet=True)
+        lemmatizer = WordNetLemmatizer()
+        stop_words = set(nltk_stopwords.words('english'))
+
         with open(MODEL_PATH, 'rb') as f:
             model = pickle.load(f)
         print("Scikit-learn Logistic Regression Model loaded successfully.")
@@ -51,12 +64,6 @@ def _load_models():
         model = None
         embedder = None
         return False
-
-# Initialize NLTK
-nltk.download('stopwords', quiet=True)
-nltk.download('wordnet', quiet=True)
-lemmatizer = WordNetLemmatizer()
-stop_words = set(stopwords.words('english'))
 
 def clean_text(text):
     if not isinstance(text, str):
@@ -180,7 +187,7 @@ def get_suggestions(level):
     return random.sample(pool, min(len(pool), 3)) if pool else []
 
 def get_gemini_analysis(text):
-    if not gemini_model:
+    if not gemini_client:
         return None, None, None
 
     prompt = f"""
@@ -198,12 +205,13 @@ def get_gemini_analysis(text):
     """
     
     try:
-        response = gemini_model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
+        response = gemini_client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
                 max_output_tokens=250,
                 temperature=0.2
-            )
+            ) if genai_types else None
         )
         content = response.text.strip()
         # Robust Section Splitting

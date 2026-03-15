@@ -11,5 +11,5 @@ supabase
 torch
 transformers
 accelerate
-google-generativeai
+google-genai
 sentence-transformers
