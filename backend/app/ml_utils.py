@@ -27,19 +27,30 @@ else:
     print("Warning: GEMINI_API_KEY not found or default. Gemini analysis will be skipped.")
     gemini_model = None
 
-# Load artifacts
+# Lazy-load artifacts (avoids blocking uvicorn port binding on Render)
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml_models", "anxiety_model.pkl")
 
-try:
-    with open(MODEL_PATH, 'rb') as f:
-        model = pickle.load(f)
-    print("Scikit-learn Logistic Regression Model loaded successfully.")
-    print("Loading SentenceTransformer ('all-MiniLM-L6-v2')...")
-    embedder = SentenceTransformer('all-MiniLM-L6-v2')
-except Exception as e:
-    print(f"Error: Model artifacts not found. Please train the model first. {e}")
-    model = None
-    embedder = None
+model = None
+embedder = None
+
+def _load_models():
+    """Load ML models on first use (lazy loading) to avoid startup timeout."""
+    global model, embedder
+    if model is not None and embedder is not None:
+        return True
+    try:
+        with open(MODEL_PATH, 'rb') as f:
+            model = pickle.load(f)
+        print("Scikit-learn Logistic Regression Model loaded successfully.")
+        print("Loading SentenceTransformer ('all-MiniLM-L6-v2')...")
+        embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        print("SentenceTransformer loaded successfully.")
+        return True
+    except Exception as e:
+        print(f"Error loading model artifacts: {e}")
+        model = None
+        embedder = None
+        return False
 
 # Initialize NLTK
 nltk.download('stopwords', quiet=True)
@@ -228,7 +239,7 @@ def get_gemini_analysis(text):
 
 
 def analyze_anxiety(text):
-    if not model or not embedder:
+    if not _load_models():
         return None
 
     cleaned = clean_text(text)
