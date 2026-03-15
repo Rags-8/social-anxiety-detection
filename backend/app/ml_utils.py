@@ -2,7 +2,6 @@ import os
 import re
 import pickle
 import random
-import threading
 from dotenv import load_dotenv
 # NOTE: Heavy imports (torch, sentence_transformers, textblob, nltk) are intentionally
 # deferred to inside functions. This lets uvicorn bind the port INSTANTLY on Render.
@@ -39,15 +38,11 @@ embedder = None
 lemmatizer = None
 stop_words = None
 
-# Threading event: set when models are fully loaded
-_models_ready = threading.Event()
-_load_error = False
-
 def _load_models():
     """Load ML models and NLTK data on first use (lazy loading) to avoid startup timeout.
     All heavy imports are done HERE, not at module level, so uvicorn binds the port fast.
     """
-    global model, embedder, lemmatizer, stop_words, _load_error
+    global model, embedder, lemmatizer, stop_words
     if model is not None and embedder is not None:
         return True
     try:
@@ -68,23 +63,12 @@ def _load_models():
         from sentence_transformers import SentenceTransformer  # imports torch here, not at module load
         embedder = SentenceTransformer('all-MiniLM-L6-v2')
         print("SentenceTransformer loaded successfully.")
-        _models_ready.set()  # Signal that models are ready
         return True
     except Exception as e:
         print(f"Error loading model artifacts: {e}")
         model = None
         embedder = None
-        _load_error = True
-        _models_ready.set()  # Unblock waiters even on error
         return False
-
-def start_model_preload():
-    """Call this at app startup to begin loading models in a background thread.
-    The port binds immediately; models load in the background.
-    """
-    thread = threading.Thread(target=_load_models, daemon=True, name="ModelPreloader")
-    thread.start()
-    print("Model preloading started in background thread.")
 
 def clean_text(text):
     if not isinstance(text, str):
@@ -268,12 +252,8 @@ def get_gemini_analysis(text):
 
 
 def analyze_anxiety(text):
-    # Wait up to 5 minutes for background models to load
-    print("Waiting for ML models to be ready...")
-    ready = _models_ready.wait(timeout=300)
-    
-    if not ready or _load_error:
-        print("Models failed to load or timed out.")
+    if not _load_models():
+        print("Models failed to load.")
         return None
 
     cleaned = clean_text(text)

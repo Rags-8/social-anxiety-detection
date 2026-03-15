@@ -5,9 +5,10 @@ from typing import List
 from datetime import datetime
 from .database import init_db
 from .models import AnalysisRequest, AnalysisResponse, ConversationModel
-from .ml_utils import analyze_anxiety, start_model_preload
+from .ml_utils import analyze_anxiety
 from .supabase_client import supabase
 import json
+
 
 app = FastAPI()
 
@@ -23,8 +24,8 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     init_db()
-    # Pre-load ML models in background so first request isn't slow
-    start_model_preload()
+    # ML models will load on the first /analyze request to avoid freezing CPU
+
 
 @app.get("/")
 def read_root():
@@ -38,21 +39,24 @@ def analyze_text(request: AnalysisRequest):
 
     # Save to Supabase via REST API
     try:
-        suggestions_payload = {
-            "list": result["suggestions"],
-            "confidence": result.get("confidence", 0.0)
-        }
+        if supabase is None:
+            print("Skipping DB save: Supabase client not configured.")
+        else:
+            suggestions_payload = {
+                "list": result["suggestions"],
+                "confidence": result.get("confidence", 0.0)
+            }
 
-        data = {
-            "user_text": request.text,
-            "anxiety_level": result["anxiety_level"],
-            "sentiment_score": result["sentiment_score"],
-            "suggestions": json.dumps(suggestions_payload),
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # supabase.table().insert() returns data on success
-        supabase.table("conversations").insert(data).execute()
+            data = {
+                "user_text": request.text,
+                "anxiety_level": result["anxiety_level"],
+                "sentiment_score": result["sentiment_score"],
+                "suggestions": json.dumps(suggestions_payload),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # supabase.table().insert() returns data on success
+            supabase.table("conversations").insert(data).execute()
         
     except Exception as e:
         print(f"Error saving to DB: {e}")
@@ -68,6 +72,9 @@ def analyze_text(request: AnalysisRequest):
 @app.get("/history")
 def get_history():
     try:
+        if supabase is None:
+            return []
+            
         # Fetch the latest 50 conversations via Supabase REST API
         response = supabase.table("conversations").select("*").order("timestamp", desc=True).limit(50).execute()
         rows = response.data
@@ -103,6 +110,9 @@ def get_history():
 @app.get("/insights")
 def get_insights():
     try:
+        if supabase is None:
+            return {"anxiety_distribution": [], "timeline": []}
+            
         # Fetch all recent (e.g. last 1000) conversations to aggregate locally
         # Since Supabase standard REST API doesn't easily support raw GROUP BY SQL
         response = supabase.table("conversations").select("anxiety_level, timestamp").order("timestamp", desc=True).limit(1000).execute()
@@ -144,6 +154,8 @@ def get_insights():
 @app.delete("/history/{item_id}")
 def delete_history_item(item_id: int):
     try:
+        if supabase is None:
+            raise HTTPException(status_code=500, detail="Supabase client not configured")
         supabase.table("conversations").delete().eq("id", item_id).execute()
         return {"message": "Item deleted successfully"}
     except Exception as e:
