@@ -2,10 +2,10 @@ import os
 import re
 import pickle
 import random
-import nltk
 from dotenv import load_dotenv
-from textblob import TextBlob
-from sentence_transformers import SentenceTransformer
+# NOTE: Heavy imports (torch, sentence_transformers, textblob, nltk) are intentionally
+# deferred to inside functions. This lets uvicorn bind the port INSTANTLY on Render.
+# Importing torch/sentence_transformers at module level takes 3-5 min on Render Free tier.
 
 # Use the new google.genai SDK
 try:
@@ -39,23 +39,28 @@ lemmatizer = None
 stop_words = None
 
 def _load_models():
-    """Load ML models and NLTK data on first use (lazy loading) to avoid startup timeout."""
+    """Load ML models and NLTK data on first use (lazy loading) to avoid startup timeout.
+    All heavy imports are done HERE, not at module level, so uvicorn binds the port fast.
+    """
     global model, embedder, lemmatizer, stop_words
     if model is not None and embedder is not None:
         return True
     try:
-        # Initialize NLTK lazily (avoids blocking port bind at import time)
+        import nltk
         from nltk.corpus import stopwords as nltk_stopwords
         from nltk.stem import WordNetLemmatizer
         nltk.download('stopwords', quiet=True)
         nltk.download('wordnet', quiet=True)
         lemmatizer = WordNetLemmatizer()
         stop_words = set(nltk_stopwords.words('english'))
+        print("NLTK initialized.")
 
         with open(MODEL_PATH, 'rb') as f:
             model = pickle.load(f)
         print("Scikit-learn Logistic Regression Model loaded successfully.")
-        print("Loading SentenceTransformer ('all-MiniLM-L6-v2')...")
+
+        print("Loading SentenceTransformer ('all-MiniLM-L6-v2')... (this may take a moment)")
+        from sentence_transformers import SentenceTransformer  # imports torch here, not at module load
         embedder = SentenceTransformer('all-MiniLM-L6-v2')
         print("SentenceTransformer loaded successfully.")
         return True
@@ -352,6 +357,7 @@ def analyze_anxiety(text):
     gemini_level, gemini_reason, gemini_suggestions = get_gemini_analysis(text)
     
     # Sentiment & Default Suggestions
+    from textblob import TextBlob  # lazy import - textblob is lightweight but consistent with pattern
     blob = TextBlob(text)
     sentiment_score = blob.sentiment.polarity
     suggestions = get_suggestions(current_best_level)
