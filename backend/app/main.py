@@ -5,9 +5,10 @@ from typing import List
 from datetime import datetime
 from .database import init_db
 from .models import AnalysisRequest, AnalysisResponse, ConversationModel
-from .ml_utils import analyze_anxiety
+from .ml_utils import analyze_anxiety, initialize_nltk
 from .supabase_client import supabase
 import json
+import time
 
 
 app = FastAPI()
@@ -24,7 +25,8 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     init_db()
-    # ML models will load on the first /analyze request to avoid freezing CPU
+    # Initialize NLTK on startup to avoid cold-start delays on first request
+    initialize_nltk()
 
 
 @app.get("/")
@@ -71,12 +73,18 @@ def analyze_text(request: AnalysisRequest):
 
 @app.get("/history")
 def get_history():
+    start_time = time.time()
     try:
         if supabase is None:
             return []
             
         # Fetch the latest 50 conversations via Supabase REST API
+        print(f"DEBUG: Fetching history from Supabase...")
+        db_start = time.time()
         response = supabase.table("conversations").select("*").order("timestamp", desc=True).limit(50).execute()
+        db_end = time.time()
+        print(f"DEBUG: Supabase history fetch took {db_end - db_start:.2f}s")
+
         rows = response.data
 
         history_response = []
@@ -102,6 +110,9 @@ def get_history():
                 "confidence": confidence_score,
                 "timestamp": row["timestamp"]
             })
+        
+        total_time = time.time() - start_time
+        print(f"DEBUG: /history total request time: {total_time:.2f}s")
         return history_response
     except Exception as e:
         print(f"Error fetching history: {e}")
@@ -109,13 +120,18 @@ def get_history():
 
 @app.get("/insights")
 def get_insights():
+    start_time = time.time()
     try:
         if supabase is None:
             return {"anxiety_distribution": [], "timeline": []}
             
         # Fetch all recent (e.g. last 1000) conversations to aggregate locally
-        # Since Supabase standard REST API doesn't easily support raw GROUP BY SQL
+        print(f"DEBUG: Fetching insights from Supabase...")
+        db_start = time.time()
         response = supabase.table("conversations").select("anxiety_level, timestamp").order("timestamp", desc=True).limit(1000).execute()
+        db_end = time.time()
+        print(f"DEBUG: Supabase insights fetch took {db_end - db_start:.2f}s")
+        
         rows = response.data
 
         # 1. Distribution counts & 2. Timeline by day
@@ -143,6 +159,8 @@ def get_insights():
         # Sort timeline by date ascending for charts
         timeline = sorted(list(timeline_dict.values()), key=lambda x: x["date"])
 
+        total_time = time.time() - start_time
+        print(f"DEBUG: /insights total request time: {total_time:.2f}s")
         return {
             "anxiety_distribution": anxiety_distribution,
             "timeline": timeline

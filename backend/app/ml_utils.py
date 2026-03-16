@@ -38,29 +38,48 @@ embedder = None
 lemmatizer = None
 stop_words = None
 
-def _load_models():
-    """Load ML models and NLTK data on first use (lazy loading) to avoid startup timeout.
-    All heavy imports are done HERE, not at module level, so uvicorn binds the port fast.
-    """
-    global model, embedder, lemmatizer, stop_words
-    
-    # Fast path if already loaded
+def initialize_nltk():
+    """Download NLTK data if not already present."""
+    global lemmatizer, stop_words
     if lemmatizer is not None and stop_words is not None:
-        if os.environ.get("RENDER"):
-            return True
-        if model is not None and embedder is not None:
-            return True
-            
+        return
     try:
         import nltk
         from nltk.corpus import stopwords as nltk_stopwords
         from nltk.stem import WordNetLemmatizer
-        nltk.download('stopwords', quiet=True)
-        nltk.download('wordnet', quiet=True)
+        
+        # Check if data exists before downloading (faster)
+        try:
+            nltk.data.find('corpora/stopwords')
+            nltk.data.find('corpora/wordnet')
+        except LookupError:
+            print("Downloading NLTK stopwords and wordnet...")
+            nltk.download('stopwords', quiet=True)
+            nltk.download('wordnet', quiet=True)
+            
         lemmatizer = WordNetLemmatizer()
         stop_words = set(nltk_stopwords.words('english'))
-        print("NLTK initialized.")
+        print("NLTK initialized successfully.")
+    except Exception as e:
+        print(f"Error initializing NLTK: {e}")
 
+def _load_models():
+    """Load ML models and NLTK data on first use (lazy loading) to avoid startup timeout.
+    All heavy imports are done HERE, not at module level, so uvicorn binds the port fast.
+    """
+    global model, embedder
+    
+    # Ensure NLTK is ready
+    initialize_nltk()
+    
+    # Fast path if already loaded
+    if os.environ.get("RENDER") or os.environ.get("SKIP_ML"):
+        return True
+    
+    if model is not None and embedder is not None:
+        return True
+            
+    try:
         if os.environ.get("RENDER") or os.environ.get("SKIP_ML"):
             print("Render environment detected: Skipping massive PyTorch model (SentenceTransformer) to avoid OOM SIGKILL and 502 Bad Gateway. Using Gemini + NLP rules only.")
             return True
