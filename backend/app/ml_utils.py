@@ -30,11 +30,12 @@ if google_genai and GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_he
 else:
     print("Warning: GEMINI_API_KEY not found or default. Gemini analysis will be skipped.")
 
-# Lazy-load artifacts (avoids blocking uvicorn port binding on Render)
+# Lazy-load artifacts
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml_models", "anxiety_model.pkl")
+VECTORIZER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml_models", "vectorizer.pkl")
 
 model = None
-embedder = None
+vectorizer = None
 lemmatizer = None
 stop_words = None
 
@@ -48,12 +49,10 @@ def initialize_nltk():
         from nltk.corpus import stopwords as nltk_stopwords
         from nltk.stem import WordNetLemmatizer
         
-        # Check if data exists before downloading (faster)
         try:
             nltk.data.find('corpora/stopwords')
             nltk.data.find('corpora/wordnet')
         except LookupError:
-            print("Downloading NLTK stopwords and wordnet...")
             nltk.download('stopwords', quiet=True)
             nltk.download('wordnet', quiet=True)
             
@@ -64,110 +63,99 @@ def initialize_nltk():
         print(f"Error initializing NLTK: {e}")
 
 def _load_models():
-    """Load ML models and NLTK data on first use (lazy loading) to avoid startup timeout.
-    All heavy imports are done HERE, not at module level, so uvicorn binds the port fast.
-    """
-    global model, embedder
-    
-    # Ensure NLTK is ready
+    """Load scikit-learn model and vectorizer."""
+    global model, vectorizer
     initialize_nltk()
     
-    # Fast path if already loaded
-    if os.environ.get("RENDER") or os.environ.get("SKIP_ML"):
-        return True
-    
-    if model is not None and embedder is not None:
+    if model is not None and vectorizer is not None:
         return True
             
     try:
-        if os.environ.get("RENDER") or os.environ.get("SKIP_ML"):
-            print("Render environment detected: Skipping massive PyTorch model (SentenceTransformer) to avoid OOM SIGKILL and 502 Bad Gateway. Using Gemini + NLP rules only.")
-            return True
-
         with open(MODEL_PATH, 'rb') as f:
             model = pickle.load(f)
-        print("Scikit-learn Logistic Regression Model loaded successfully.")
-
-        print("Loading SentenceTransformer ('all-MiniLM-L6-v2')... (this may take a moment)")
-        from sentence_transformers import SentenceTransformer  # imports torch here, not at module load
-        embedder = SentenceTransformer('all-MiniLM-L6-v2')
-        print("SentenceTransformer loaded successfully.")
+        
+        # We need the vectorizer used during training
+        if os.path.exists(VECTORIZER_PATH):
+            with open(VECTORIZER_PATH, 'rb') as f:
+                vectorizer = pickle.load(f)
+        else:
+            print(f"Warning: Vectorizer not found at {VECTORIZER_PATH}. ML predictions may fail.")
+            
+        print("ML Model and Vectorizer loaded successfully.")
         return True
     except Exception as e:
         print(f"Error loading model artifacts: {e}")
-        model = None
-        embedder = None
-        # Still return True because NLTK is loaded, so we can use fallback NLP + Gemini
-        return True
+        return False
 
 def clean_text(text):
     if not isinstance(text, str):
         return ""
-    
-    # Remove HTML/URLs
-    text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
-    
-    # Handle common contractions
-    text = re.sub(r"can't", "cannot", text)
-    text = re.sub(r"won't", "will not", text)
-    text = re.sub(r"n't", " not", text)
-    text = re.sub(r"'re", " are", text)
-    text = re.sub(r"'s", " is", text)
-    text = re.sub(r"'d", " would", text)
-    text = re.sub(r"'ll", " will", text)
-    text = re.sub(r"'t", " not", text)
-    text = re.sub(r"'ve", " have", text)
-    text = re.sub(r"'m", " am", text)
-
-    # Convert to lowercase
-    text = text.lower()
-    # Remove punctuation
-    text = re.sub(r'[^a-zA-Z\s]', ' ', text)
-    # Normalize whitespace
+    text = re.sub(r'[^a-zA-Z\s]', ' ', text.lower())
     text = re.sub(r'\s+', ' ', text).strip()
-    
-    tokens = text.split()
-    # We still clean to reduce noise
-    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words and len(word) > 1]
-    return " ".join(tokens)
+    return text
 
-def is_gibberish(text):
-    if not text or len(text) < 3:
-        return False
-    
-    # Check for nonsense word patterns
-    words = text.split()
-    for word in words:
-        # Check for long words
-        if len(word) > 12:
-            vowels = re.findall(r'[aeiouAEIOU]', word)
-            # Long words with very few vowels
-            if not vowels or len(vowels) / len(word) < 0.20:
-                return True
-            # Long words with TOO many vowels (nonsense like "aogiehskldiou...")
-            if len(vowels) / len(word) > 0.40 and len(word) > 15:
-                # If it's very long and almost half vowels, and doesn't look like common long words
-                return True
-                
-        # Check for repeated characters (e.g., "aaaaa")
-        if re.search(r'(.)\1{4,}', word):
-            return True
+def get_gemini_reasoning(user_sentence):
+    """Step 3 — Gemini Reasoning as per user requirements."""
+    if not gemini_client:
+        return None, "Gemini API not configured."
+
+    prompt = f"""You are an assistant that detects social anxiety from sentences.
+
+Classify the following sentence into one of these categories:
+
+Low Anxiety
+Moderate Anxiety
+High Anxiety
+
+Guidelines:
+
+Low Anxiety:
+Confidence, comfort, positive social interaction.
+
+Moderate Anxiety:
+Nervousness, hesitation, worry, overthinking.
+
+High Anxiety:
+Avoidance, panic, fear of judgement, physical anxiety symptoms.
+
+Analyze the emotional meaning of the sentence, not just keywords.
+
+Sentence:
+{user_sentence}
+
+Return only:
+
+Anxiety Level: <Low / Moderate / High>
+Short Reason: <One sentence explanation>"""
+
+    try:
+        response = gemini_client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=150,
+                temperature=0.1
+            ) if genai_types else None
+        )
+        content = response.text.strip()
+        
+        # Parse content
+        level = "Moderate"
+        reason = "Classification by AI reasoning."
+        
+        if "Anxiety Level:" in content:
+            level_part = content.split("Anxiety Level:")[1].split("\n")[0].strip()
+            if "High" in level_part: level = "High"
+            elif "Low" in level_part: level = "Low"
+            else: level = "Moderate"
             
-        # Check for 5+ consecutive vowels or 6+ consecutive consonants (relaxed for common words)
-        if re.search(r'[aeiouAEIOU]{5,}', word) or re.search(r'[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{6,}', word):
-            if word.lower() not in ["strength", "lengths", "straight"]: 
-                return True
+        if "Short Reason:" in content:
+            reason = content.split("Short Reason:")[1].strip()
             
-    # Check for random keyboard mashing (high consonant density)
-    if len(text) > 10:
-        consonants = re.findall(r'[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]', text)
-        vowels = re.findall(r'[aeiouAEIOU]', text)
-        if not vowels:
-            return True
-        if len(consonants) / len(text) > 0.85:
-            return True
-            
-    return False
+        return level, reason
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        return None, None
 
 def get_suggestions(level):
     suggestion_pools = {
@@ -218,243 +206,59 @@ def get_suggestions(level):
     }
     
     pool = suggestion_pools.get(level, [])
-    # Return a random sample of 3 suggestions (or fewer if the pool is small)
     return random.sample(pool, min(len(pool), 3)) if pool else []
 
-def get_gemini_analysis(text):
-    if not gemini_client:
-        return None, None, None
-
-    prompt = f"""
-    Analyze this sentence for social anxiety indicators: "{text}"
-    
-    Provide your analysis in exactly three labeled sections:
-    LEVEL: <Low / Moderate / High>
-    REASON: <One short sentence explaining why>
-    SUGGESTIONS: <Exactly three practical, personalized, and empathetic tips for the user, separated by semicolons>
-
-    Classification Guide:
-    - Low: Confidence, positive socializing, relaxed.
-    - Moderate: Shyness, slight worry, awkwardness, overthinking.
-    - High: Fear of judgment, intense physical signs (panic, heart racing), total avoidance, terror.
-    """
-    
-    try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt,
-            config=genai_types.GenerateContentConfig(
-                max_output_tokens=250,
-                temperature=0.2
-            ) if genai_types else None
-        )
-        content = response.text.strip()
-        # Robust Section Splitting
-        sections = re.split(r"(LEVEL|REASON|SUGGESTIONS):", content, flags=re.IGNORECASE)
-        
-        # Mapping results
-        results = {}
-        for i in range(1, len(sections), 2):
-            key = sections[i].upper()
-            val = sections[i+1].strip() if (i+1) < len(sections) else ""
-            results[key] = val
-
-        anxiety_level = results.get("LEVEL", "Low").capitalize()
-        # Ensure it's one of the expected values
-        if "High" in anxiety_level: anxiety_level = "High"
-        elif "Moderate" in anxiety_level: anxiety_level = "Moderate"
-        else: anxiety_level = "Low"
-
-        reason = results.get("REASON", "Semantic analysis confirmed.")
-        s_raw = results.get("SUGGESTIONS", "")
-        
-        suggestions = []
-        if s_raw:
-            # Split by common bullet patterns, newlines, or semicolons
-            split_res = re.split(r'[;•\*\-\n]|\d\.', s_raw)
-            suggestions = [s.strip() for s in split_res if len(s.strip()) > 5]
-            suggestions = suggestions[:3] # Ensure only 3
-
-        return anxiety_level, reason, suggestions
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
-        return None, None, None
-
-
 def analyze_anxiety(text):
+    """Follows the Step 1-4 logic requested by the user."""
     if not _load_models():
-        print("Models failed to load.")
         return None
 
+    # Step 1 — ML Prediction
     cleaned = clean_text(text)
+    ml_level = "Low"
+    ml_confidence = 0.0
+    probabilities = [0.0, 0.0, 0.0]
 
-    # Edge-case: extreme gibberish or empty string
-    if is_gibberish(text) or not cleaned.strip():
-        return {
-            "anxiety_level": "Low",
-            "sentiment_score": 0.0,
-            "explanation": "Input was identified as potentially irrelevant or nonsensical.",
-            "suggestions": get_suggestions("Low"),
-            "confidence": 100.0,
-            "probabilities": [1.0, 0.0, 0.0]
-        }
-
-    # 1. Get Semantic Intensity Score and record matches
-    text_lower = f" {text.lower()} "
-    intensity_score = 0
-    high_matches = []
-    mod_matches = []
-    
-    strong_high_patterns = {
-        "terrified": r"\bterrified\b|\bterrify\w*\b",
-        "panic": r"\bpanic\w*\b",
-        "fear": r"\bfear\b|\bfearful\b",
-        "heart racing": r"\bheart\s+race\w*\b|\bheart\s+racing\b|\bracing\s+heart\b",
-        "shaking hands": r"\bhands?\s+shak\w*\b|\bshak\w*\s+hands?\b",
-        "overwhelmed": r"\boverwhelmed\b",
-        "avoidance of people": r"\bavoid\s+.*people\b|\bavoid\s+.*person\b",
-        "avoidance of speaking": r"\bavoid\s+.*speak\w*\b|\bavoid\s+.*talking\b",
-        "avoidance of social events": r"\bavoid\s+.*social\s+event\w*\b|\bavoid\s+.*gathering\w*\b|\bavoid\s+.*party\b",
-        "extreme nervousness": r"\bextremely\s+nervous\b|\bextremely\s+anxious\b|\bintense\s+anxiety\b",
-        "intense fear": r"\bintense\s+fear\b",
-        "fear of judgment": r"\bjudged?\b|\bjudgement\b|\bcriticiz\w*\b",
-        "eye contact avoidance": r"\beye\s+contact\b",
-        "crowds": r"\bcrowds?\b",
-        "anxious": r"\banxious\b",
-        "worry": r"\bworry\b|\bworried\b",
-        "anxiety": r"\banxiety\b",
-        "restless": r"\brestless\w*\b",
-        "sleep issues": r"\btrouble\s+sleep\w*\b|\bsleepless\b|\bcannot\s+sleep\b"
-    }
-    
-    for label, pattern in strong_high_patterns.items():
-        if re.search(pattern, text_lower):
-            intensity_score += 3
-            high_matches.append(label)
-            
-    moderate_patterns = {
-        "nervous": r"\bnervous\b",
-        "shy": r"\bshy\b",
-        "uncomfortable": r"\buncomfortable\b",
-        "hesitant": r"\bhesitate\b|\bhesitant\b",
-        "awkward": r"\bawkward\b",
-        "tense": r"\btense\b|\btension\b",
-        "overthinking": r"\boverthink\w*\b",
-        "slight anxiety": r"\bslightly\s+anxious\b|\bslight\s+anxiety\b"
-    }
-    
-    for label, pattern in moderate_patterns.items():
-        if re.search(pattern, text_lower):
-            intensity_score += 2
-            mod_matches.append(label)
-
-    # Low indicators check
-    low_patterns = [r"\benjoy\s+.*meeting\b", r"\bfeel\s+confident\b", r"\brelaxed\b", r"\bhappy\s+to\s+socialize\b"]
-    has_low = False
-    for pattern in low_patterns:
-        if re.search(pattern, text_lower):
-            has_low = True
-            if not high_matches and not mod_matches:
-                intensity_score -= 2
-
-    # PRIORITY OVERRIDE
-    if high_matches:
-        intensity_score = max(intensity_score, 3)
-        score_level = "High"
-    elif mod_matches:
-        intensity_score = max(intensity_score, 2)
-        score_level = "Moderate"
-    else:
-        score_level = "Low"
-
-    # 2. Get ML Prediction
-    if embedder is not None and model is not None:
+    if vectorizer and model:
         try:
-            features = embedder.encode([cleaned])
-            prediction_idx = int(model.predict(features)[0])
+            features = vectorizer.transform([cleaned])
             probabilities = model.predict_proba(features)[0].tolist()
-            confidence = float(max(probabilities))
+            ml_confidence = max(probabilities)
+            
+            # Map index to Level
+            # Assuming labels were 0:Low, 1:Moderate, 2:High (standard for this project)
             levels = {0: "Low", 1: "Moderate", 2: "High"}
-            ml_predicted_level = levels.get(prediction_idx, "Low")
-            print(f"DEBUG: text='{text}', score={intensity_score}, score_level='{score_level}', ml='{ml_predicted_level}'")
+            prediction_idx = int(model.predict(features)[0])
+            ml_level = levels.get(prediction_idx, "Low")
         except Exception as e:
-            print(f"ML Predict error: {e}")
-            ml_predicted_level = score_level
-            confidence = 0.85
-            probabilities = [1.0, 0.0, 0.0] if score_level == "Low" else [0.0, 1.0, 0.0] if score_level == "Moderate" else [0.0, 0.0, 1.0]
-            print(f"DEBUG (Fallback ML): text='{text}', score={intensity_score}, score_level='{score_level}'")
-    else:
-        # Fallback to local NLP rule-based score if model skipped (e.g. Render Free Tier)
-        ml_predicted_level = score_level
-        confidence = 0.85
-        probabilities = [1.0, 0.0, 0.0] if score_level == "Low" else [0.0, 1.0, 0.0] if score_level == "Moderate" else [0.0, 0.0, 1.0]
-        print(f"DEBUG (Skipped ML): text='{text}', score={intensity_score}, score_level='{score_level}'")
+            print(f"ML Step 1 error: {e}")
 
-    # 3. Apply Conflict Resolution
-    severity_order = {"High": 2, "Moderate": 1, "Low": 0}
-    current_best_level = score_level
-    if severity_order[ml_predicted_level] > severity_order[score_level]:
-        current_best_level = ml_predicted_level
-
-    # 4. Integrate Gemini Analysis
-    gemini_level, gemini_reason, gemini_suggestions = get_gemini_analysis(text)
+    # Step 2 — Confidence Check
+    final_level = ml_level
+    final_explanation = f"Classification based on ML model trained on dataset (Confidence: {ml_confidence*100:.1f}%)."
     
-    # Sentiment & Default Suggestions
-    from textblob import TextBlob  # lazy import - textblob is lightweight but consistent with pattern
+    # Step 3 & 4 — Gemini Reasoning if confidence < 75%
+    if ml_confidence < 0.75:
+        gemini_level, gemini_reason = get_gemini_reasoning(text)
+        if gemini_level:
+            final_level = gemini_level
+            final_explanation = f"Refined by Gemini Reasoning: {gemini_reason}"
+            final_confidence = 0.85 # High default for Gemini agreement
+        else:
+            final_confidence = ml_confidence
+    else:
+        final_confidence = ml_confidence
+
+    # Sentiment for UI metrics
+    from textblob import TextBlob
     blob = TextBlob(text)
     sentiment_score = blob.sentiment.polarity
-    suggestions = get_suggestions(current_best_level)
-    
-    final_anxiety_level = current_best_level
-    final_suggestions = suggestions # Default to local randomized
-    
-    # Generate Local Analysis Reason
-    local_reason = ""
-    if high_matches:
-        local_reason = f"Identified strong anxiety triggers: {', '.join(high_matches)}."
-    elif mod_matches:
-        local_reason = f"Detected moderate anxiety indicators: {', '.join(mod_matches)}."
-    else:
-        local_reason = f"Classification based on overall sentence structure and sentiment."
 
-    analysis_explanation = f"Analysis: {local_reason}"
-    
-    if gemini_level:
-        # Prioritize Gemini Suggestions if API is working
-        if gemini_suggestions and len(gemini_suggestions) >= 2:
-            final_suggestions = gemini_suggestions
-            print(f"DEBUG: Using personalized suggestions from Gemini.")
-
-        # Accuracy Tuning: Multi-Factor Severity Rule
-        # If Gemini is High, we almost always trust it unless local is empty/gibberish
-        if severity_order[gemini_level] > severity_order[current_best_level]:
-            final_anxiety_level = gemini_level
-            analysis_explanation = f"Gemini Analysis: {gemini_reason} (Advanced semantic detection)"
-        elif gemini_level == current_best_level:
-            # Both match
-            analysis_explanation = f"Analysis: {gemini_reason} (Confirmed by semantic analysis)"
-            confidence = min(confidence * 1.15, 0.99) # Higher boost for agreement
-        else:
-            # Local was higher (e.g. physical trigger caught by local but missed by Gemini)
-            analysis_explanation = f"{local_reason} Gemini detected '{gemini_level}' but higher severity logic was prioritized for safety."
-    
-    anxiety_level = final_anxiety_level
-    
-    # Calibrate confidence based on final level and agreements
-    if anxiety_level == "High":
-        if high_matches or gemini_level == "High":
-            confidence = max(confidence, 0.95)
-    elif anxiety_level == "Moderate":
-        confidence = max(confidence, 0.88)
-    elif anxiety_level == "Low":
-        confidence = max(confidence, 0.96)
-
-    # Final result structure
     return {
-        "anxiety_level": anxiety_level,
+        "anxiety_level": final_level,
         "sentiment_score": sentiment_score,
-        "explanation": analysis_explanation,
-        "suggestions": final_suggestions,
-        "confidence": confidence * 100.0,
+        "explanation": final_explanation,
+        "suggestions": get_suggestions(final_level),
+        "confidence": final_confidence * 100.0,
         "probabilities": probabilities
     }

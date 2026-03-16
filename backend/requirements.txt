@@ -1,6 +1,5 @@
 fastapi
 uvicorn[standard]
-psycopg2-binary
 scikit-learn
 nltk
 pandas
@@ -8,10 +7,8 @@ pydantic
 python-dotenv
 textblob
 supabase
-torch
-transformers
-accelerate
 google-genai
-sentence-transformers
+websockets>=13.0
+realtime>=2.0.0
 websockets>=13.0
 realtime>=2.0.0
