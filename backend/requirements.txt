@@ -13,3 +13,5 @@ transformers
 accelerate
 google-genai
 sentence-transformers
+websockets>=13.0
+realtime>=2.0.0
