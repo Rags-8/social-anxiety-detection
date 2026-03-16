@@ -43,8 +43,14 @@ def _load_models():
     All heavy imports are done HERE, not at module level, so uvicorn binds the port fast.
     """
     global model, embedder, lemmatizer, stop_words
-    if model is not None and embedder is not None:
-        return True
+    
+    # Fast path if already loaded
+    if lemmatizer is not None and stop_words is not None:
+        if os.environ.get("RENDER"):
+            return True
+        if model is not None and embedder is not None:
+            return True
+            
     try:
         import nltk
         from nltk.corpus import stopwords as nltk_stopwords
@@ -54,6 +60,10 @@ def _load_models():
         lemmatizer = WordNetLemmatizer()
         stop_words = set(nltk_stopwords.words('english'))
         print("NLTK initialized.")
+
+        if os.environ.get("RENDER") or os.environ.get("SKIP_ML"):
+            print("Render environment detected: Skipping massive PyTorch model (SentenceTransformer) to avoid OOM SIGKILL and 502 Bad Gateway. Using Gemini + NLP rules only.")
+            return True
 
         with open(MODEL_PATH, 'rb') as f:
             model = pickle.load(f)
@@ -68,7 +78,8 @@ def _load_models():
         print(f"Error loading model artifacts: {e}")
         model = None
         embedder = None
-        return False
+        # Still return True because NLTK is loaded, so we can use fallback NLP + Gemini
+        return True
 
 def clean_text(text):
     if not isinstance(text, str):
@@ -338,15 +349,27 @@ def analyze_anxiety(text):
         score_level = "Low"
 
     # 2. Get ML Prediction
-    features = embedder.encode([cleaned])
-    prediction_idx = int(model.predict(features)[0])
-    probabilities = model.predict_proba(features)[0].tolist()
-    confidence = float(max(probabilities))
-
-    levels = {0: "Low", 1: "Moderate", 2: "High"}
-    ml_predicted_level = levels.get(prediction_idx, "Low")
-    
-    print(f"DEBUG: text='{text}', score={intensity_score}, score_level='{score_level}', ml='{ml_predicted_level}'")
+    if embedder is not None and model is not None:
+        try:
+            features = embedder.encode([cleaned])
+            prediction_idx = int(model.predict(features)[0])
+            probabilities = model.predict_proba(features)[0].tolist()
+            confidence = float(max(probabilities))
+            levels = {0: "Low", 1: "Moderate", 2: "High"}
+            ml_predicted_level = levels.get(prediction_idx, "Low")
+            print(f"DEBUG: text='{text}', score={intensity_score}, score_level='{score_level}', ml='{ml_predicted_level}'")
+        except Exception as e:
+            print(f"ML Predict error: {e}")
+            ml_predicted_level = score_level
+            confidence = 0.85
+            probabilities = [1.0, 0.0, 0.0] if score_level == "Low" else [0.0, 1.0, 0.0] if score_level == "Moderate" else [0.0, 0.0, 1.0]
+            print(f"DEBUG (Fallback ML): text='{text}', score={intensity_score}, score_level='{score_level}'")
+    else:
+        # Fallback to local NLP rule-based score if model skipped (e.g. Render Free Tier)
+        ml_predicted_level = score_level
+        confidence = 0.85
+        probabilities = [1.0, 0.0, 0.0] if score_level == "Low" else [0.0, 1.0, 0.0] if score_level == "Moderate" else [0.0, 0.0, 1.0]
+        print(f"DEBUG (Skipped ML): text='{text}', score={intensity_score}, score_level='{score_level}'")
 
     # 3. Apply Conflict Resolution
     severity_order = {"High": 2, "Moderate": 1, "Low": 0}
