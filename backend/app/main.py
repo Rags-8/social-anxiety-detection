@@ -113,6 +113,26 @@ def get_history():
     finally:
         conn.close()
 
+@app.delete("/history/{item_id}")
+def delete_history_item(item_id: int):
+    """Deletes a specific prediction from the database."""
+    conn = get_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection error.")
+        
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM predictions WHERE id = ?", (item_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Item not found.")
+        conn.commit()
+        return {"message": "Conversation deleted successfully."}
+    except Exception as e:
+        print(f"Error deleting history item: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error.")
+    finally:
+        conn.close()
+
 @app.get("/insights")
 def get_insights():
     """Aggregates anxiety levels and daily trends for visualization."""

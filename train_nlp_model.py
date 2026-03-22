@@ -132,10 +132,10 @@ def train_and_evaluate(df):
     df_1 = df_train[df_train['label'] == 1]
     df_2 = df_train[df_train['label'] == 2]
     
-    max_size = len(df_0) # Upsample to match Normal class
-    print(f"Balancing dataset to {max_size} samples per class...")
+    max_size = max(len(df_0), len(df_1), len(df_2)) 
+    print(f"Balancing dataset to {max_size} samples per class (based on largest class)...")
     
-    df_0_bal = df_0
+    df_0_bal = resample(df_0, replace=True, n_samples=max_size, random_state=42)
     df_1_bal = resample(df_1, replace=True, n_samples=max_size, random_state=42)
     df_2_bal = resample(df_2, replace=True, n_samples=max_size, random_state=42)
     
@@ -151,8 +151,8 @@ def train_and_evaluate(df):
     word_tfidf = TfidfVectorizer(
         analyzer='word',
         ngram_range=(1, 3), 
-        max_features=20000, 
-        min_df=3, 
+        max_features=30000, 
+        min_df=2, 
         stop_words='english',
         sublinear_tf=True
     )
@@ -161,7 +161,7 @@ def train_and_evaluate(df):
         analyzer='char',
         ngram_range=(2, 5),
         max_features=10000,
-        min_df=3,
+        min_df=2,
         sublinear_tf=True
     )
     
@@ -196,10 +196,10 @@ def train_and_evaluate(df):
             ('nb', nb)
         ],
         voting='soft',
-        weights=[2, 2, 1]
+        weights=[3, 3, 1]
     )
     
-    print("Fitting Ensemble...")
+    print("Fitting V7 Ensemble...")
     ensemble.fit(X_train_tfidf, y_train)
     
     y_pred = ensemble.predict(X_test_tfidf)
@@ -297,7 +297,7 @@ if __name__ == "__main__":
     df = load_and_preprocess_data('Combined Data.csv')
     if df is not None:
         model = train_and_evaluate(df)
-        save_model(model, 'nlp_anxiety_model_v6.pkl')
+        save_model(model, 'nlp_anxiety_model_v8.pkl')
         
         # Quick test
         print("\n--- V3 Production Test ---")

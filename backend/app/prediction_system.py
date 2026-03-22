@@ -12,6 +12,9 @@ except ImportError:
 WORD_DICTIONARY = None
 lemmatizer = None
 
+# Import suggestions pool from ml_utils
+from .ml_utils import get_v3_suggestions
+
 def load_word_dictionary():
     global WORD_DICTIONARY
     if WORD_DICTIONARY is not None:
@@ -120,7 +123,7 @@ def predict_with_words(text: str, ml_prediction: str, ml_confidence: float) -> d
         final_conf = 0.95
         reason = "Distress signals detected (crying, pain, break down, etc)."
     # 2. SECOND PRIORITY: ML Model (User requested Combined Data.csv first)
-    elif ml_confidence > 0.60:
+    elif ml_confidence > 0.45:
         final_pred = ml_label
         final_conf = ml_confidence
         reason = f"Validated by ML Ensemble ({ml_prediction} with {ml_confidence*100:.1f}% confidence)."
@@ -173,23 +176,8 @@ def predict_with_words(text: str, ml_prediction: str, ml_confidence: float) -> d
             ]
         }
         
-    sug_map = {
-        "High Anxiety": [
-            "Practice the 4-7-8 breathing technique: breathe in for 4s, hold for 7s, exhale for 8s.",
-            "Step away to a quiet space and allow yourself a moment to recalibrate.",
-            "Use the 5-4-3-2-1 grounding exercise to return your focus to the present space."
-        ],
-        "Moderate Anxiety": [
-            "Take a few slow, deep breaths to release the tension.",
-            "Acknowledge your uneasy feelings without self-judgment; they will pass.",
-            "Break your current situation down into one small, manageable step at a time."
-        ],
-        "Low Anxiety": [
-            "Keep leveraging the positive coping strategies that brought you this peace today.",
-            "Consider jotting down what's working well for you in a journal right now.",
-            "Stay actively engaged and fully present in what you are doing."
-        ]
-    }
+    # Use randomized suggestions from ml_utils pool
+    suggestions = get_v3_suggestions(final_pred)
     
     return {
         "prediction": final_pred,
@@ -197,5 +185,5 @@ def predict_with_words(text: str, ml_prediction: str, ml_confidence: float) -> d
         "reason": reason,
         "detected_words": detected_words,
         "timestamp": timestamp,
-        "suggestions": sug_map.get(final_pred, [])
+        "suggestions": suggestions
     }

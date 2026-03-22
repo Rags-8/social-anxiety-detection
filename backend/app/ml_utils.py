@@ -106,40 +106,67 @@ def get_v3_suggestions(category):
     """
     suggestion_pools = {
         'High Anxiety': [
-            "Practice deep breathing exercises",
-            "Try a short guided meditation",
-            "Step outside for fresh air",
-            "Talk to a trusted friend or family member",
-            "Write down your thoughts to clear your mind",
-            "Take a short break from stressful situations",
-            "Listen to calming music",
-            "Focus on grounding techniques (5-4-3-2-1 method)",
-            "Consider talking to a professional"
+            "Practice the 4-7-8 breathing technique: breathe in for 4s, hold for 7s, exhale for 8s.",
+            "Try the 5-4-3-2-1 grounding exercise to return your focus to the present space.",
+            "Step away to a quiet space and allow yourself a moment to recalibrate.",
+            "Listen to a calming playlist or ambient nature sounds.",
+            "Splash cold water on your face to help reset your nervous system.",
+            "Write down your overwhelming thoughts in a 'brain dump' to clear your mind.",
+            "Use a weighted blanket or a firm hug to feel more secure and grounded.",
+            "Focus on a single, repetitive task like folding laundry or sorting items.",
+            "Gently stretch your neck and shoulders to release accumulated tension.",
+            "Remind yourself with an affirmation: 'This feeling is temporary and I am safe.'",
+            "Try progressive muscle relaxation: tense and then release each muscle group.",
+            "Limit sensory input by dimming the lights or using noise-canceling headphones.",
+            "Sip on some warm, caffeine-free herbal tea like chamomile or peppermint.",
+            "Reach out to a trusted friend or family member just to hear a familiar voice.",
+            "Engage in a quick, high-intensity movement like jumping jacks to burn off excess energy.",
+            "Focus on an Object: Describe a nearby object in extreme detail to yourself.",
+            "Change your environment: if you're inside, step outside for just one minute.",
+            "Practice box breathing: inhale 4s, hold 4s, exhale 4s, hold 4s."
+        ],
+        'Moderate Anxiety': [
+            "Take three slow, deep breaths, focusing specifically on the exhale.",
+            "Acknowledge your uneasy feelings without self-judgment; they will pass.",
+            "Break your current stressful situation down into one small, manageable step.",
+            "Go for a 10-minute brisk walk to change your perspective and move your body.",
+            "Organize your immediate workspace to create a sense of order and control.",
+            "Listen to an uplifting podcast or a favorite upbeat song.",
+            "Practice mindful observation: pick one thing in your view and notice its colors.",
+            "Check your posture—straightening your spine can often improve your mood.",
+            "Hydrate yourself with a full glass of cool water.",
+            "Write a quick to-do list for tomorrow to get worries out of your head.",
+            "Spend five minutes engaging with a pet or looking at photos of nature.",
+            "Identify one thing you can control in this moment and focus on that.",
+            "Try a quick creative outlet: doodle, hum, or write a single sentence.",
+            "Visualize a 'peaceful place' where you feel completely at ease.",
+            "Set a 5-minute timer and dedicate it solely to a relaxing activity.",
+            "Practice 'half-smiling': slightly upturn your lips to relax your facial muscles."
         ],
         'Low Anxiety': [
-            "Maintain a healthy daily routine",
-            "Try light physical activity like walking",
-            "Spend time on a hobby you enjoy",
-            "Practice gratitude journaling",
-            "Take short breaks during the day",
-            "Stay connected with friends",
-            "Get enough quality sleep",
-            "Limit overthinking by focusing on tasks",
-            "Listen to relaxing music"
-        ],
-        'Neutral': [
-            "Keep up your positive routine",
-            "Stay active and engaged in your work",
-            "Spend time with friends or family",
-            "Continue learning and growing",
-            "Maintain a balanced lifestyle",
-            "Take short breaks to refresh your mind"
+            "Keep leveraging the positive coping strategies that brought you this peace today.",
+            "Consider jotting down what's working well for you in a journal right now.",
+            "Stay actively engaged and fully present in what you are current doing.",
+            "Practice a moment of gratitude: name three things you are thankful for today.",
+            "Plan a small reward for yourself later to celebrate your balanced state.",
+            "Engage in a hobby that makes you feel competent and happy.",
+            "Offer a kind word or small gesture of help to someone else.",
+            "Try learning one new small fact or skill today to keep your mind growing.",
+            "Perform a quick sun salutation or light yoga stretch to maintain your flow.",
+            "Reflect on a recent success, no matter how small it might seem.",
+            "Spend time in nature or simply sit by a window to soak in the light.",
+            "Call someone you haven't spoken to in a while just to say hello.",
+            "Prepare a healthy, nourishing meal for yourself.",
+            "Take a moment to simply 'be' without checking your phone or a screen.",
+            "Document this feeling of peace so you can remind yourself of it later."
         ],
         'Uncertain': [
-            "Try to reflect on how you're feeling",
-            "Take a moment to relax and breathe",
-            "Write your thoughts down",
-            "Talk to someone about how you feel"
+            "Try to reflect on how you're feeling and describe it in a few more words.",
+            "Take a moment to relax, breathe deeply, and center yourself.",
+            "Write your thoughts down as they come; clarity often follows expression.",
+            "Talk to someone you trust about how you're feeling right now.",
+            "Close your eyes for 30 seconds and just focus on the sound of your breath.",
+            "Consider if there was a specific trigger for your current feeling."
         ]
     }
     
