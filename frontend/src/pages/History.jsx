@@ -86,18 +86,24 @@ const History = () => {
                             onClick={() => toggleExpand(item.id)}
                             title={expandedItems.has(item.id) ? "Click to collapse" : "Click to view full message"}
                         >
-                            {item.user_text}
+                            {item.text}
                         </div>
                         <div className="w-1/4 flex flex-col items-end pt-1">
-                            <span className={`px-4 py-1.5 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${item.anxiety_level === 'High' ? 'bg-[#587584]/15 text-[#1a365d]' :
-                                item.anxiety_level === 'Moderate' ? 'bg-[#94ADB8]/15 text-[#587584]' :
-                                    'bg-[#B2C9D8]/15 text-[#587584]'
-                                }`}>
-                                {item.anxiety_level}
+                            <span 
+                                className={`px-4 py-1.5 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${
+                                    item.prediction === 'High Anxiety' ? 'bg-red-50 text-red-700 border border-red-100' :
+                                    item.prediction === 'Moderate Anxiety' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                                    item.prediction === 'Low Anxiety' ? 'bg-green-50 text-green-700 border border-green-100' :
+                                    item.prediction === 'Uncertain' ? 'bg-gray-50 text-gray-700 border border-gray-100' :
+                                    'bg-blue-50 text-blue-700 border border-blue-100'
+                                }`}
+                                title={item.reason || ''}
+                            >
+                                {item.prediction}
                             </span>
                             {item.confidence > 0 && (
                                 <span className="text-[0.6rem] font-bold text-gray-400 mt-1 mr-2">
-                                    {item.confidence.toFixed(1)}% CONFIDENCE
+                                    {(item.confidence * 100).toFixed(1)}% CONFIDENCE
                                 </span>
                             )}
                         </div>

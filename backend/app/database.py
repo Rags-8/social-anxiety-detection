@@ -1,27 +1,31 @@
+import sqlite3
 import os
 
-# We no longer need psycopg2 / sqlite3 for direct connection
-# as we are switching to the Supabase REST API client to bypass IPv6 limits.
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "anxiety_predictions.db")
 
 def get_connection():
-    """Dummy function to avoid breaking imports that might still look for it."""
-    pass
+    """Get a direct connection to the SQLite database."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row # To access columns by name
+    return conn
 
 def init_db():
-    """
-    With the Supabase REST API, the table must be created manually in the 
-    Supabase Dashboard (SQL Editor). The API client cannot create tables.
-    
-    Ensure you have run this in Supabase SQL Editor:
-    
-    CREATE TABLE IF NOT EXISTS conversations (
-        id SERIAL PRIMARY KEY,
-        user_text TEXT NOT NULL,
-        anxiety_level VARCHAR(20) NOT NULL,
-        sentiment_score FLOAT NOT NULL,
-        suggestions TEXT NOT NULL,
-        timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-    );
-    """
-    print("Database is managed via Supabase REST API. Table must exist in Supabase.")
-    return True
+    """Initialize the SQLite database table."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS predictions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text TEXT NOT NULL,
+                prediction TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                detected_words TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+    except Exception as e:
+        print(f"Failed to initialize database: {e}")
+    finally:
+        conn.close()

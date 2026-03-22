@@ -5,10 +5,7 @@ nltk
 pandas
 pydantic
 python-dotenv
-textblob
 supabase
-google-genai
 websockets>=13.0
 realtime>=2.0.0
-websockets>=13.0
-realtime>=2.0.0
+sentence-transformers

@@ -26,10 +26,14 @@ const Chat = () => {
         setIsLoading(true);
 
         try {
-            const response = await axios.post(`${import.meta.env.VITE_API_URL}/analyze`, { text: userMsg });
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/predict`, { text: userMsg });
+            const botText = response.data.prediction === 'Uncertain' 
+                ? response.data.suggestion 
+                : "I've analyzed your thoughts. Here are my insights:";
+            
             setMessages(prev => [...prev, {
                 role: 'bot',
-                text: response.data.explanation,
+                text: botText,
                 data: response.data
             }]);
         } catch (error) {
@@ -83,31 +87,67 @@ const Chat = () => {
                                     ? 'bg-[#587584] text-white rounded-tr-none'
                                     : 'bg-white/80 backdrop-blur-md rounded-tl-none border border-white/40'
                                     }`}>
-                                    <p className="text-sm font-medium leading-relaxed">{msg.text}</p>
+                                    <p className="text-sm font-medium leading-relaxed">
+                                        {Array.isArray(msg.text) ? msg.text.join(' ') : msg.text}
+                                    </p>
                                 </div>
 
                                 {/* Bot Analysis Details */}
-                                {msg.role === 'bot' && msg.data && msg.data.anxiety_level !== 'Uncertain' && (
+                                {msg.role === 'bot' && msg.data && msg.data.prediction !== 'Uncertain' && (
                                     <div className="bg-white/40 backdrop-blur-sm rounded-[2rem] p-6 border border-white/20 space-y-6 mt-2 ml-2">
                                         <div className="flex items-center justify-between">
                                             <span className="text-[0.6rem] font-black uppercase tracking-widest text-[#94ADB8]">Analysis</span>
                                             <div className="flex gap-2">
-                                                <span className={`px-3 py-1 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${msg.data.anxiety_level === 'High' ? 'bg-[#587584]/20 text-[#1a365d]' :
-                                                    msg.data.anxiety_level === 'Moderate' ? 'bg-[#94ADB8]/20 text-[#587584]' :
-                                                        'bg-[#B2C9D8]/20 text-[#587584]'
-                                                    }`}>
-                                                    {msg.data.anxiety_level} Anxiety
+                                                <span className={`px-3 py-1 rounded-full text-[0.6rem] font-black tracking-widest uppercase ${
+                                                    msg.data.prediction === 'High Anxiety' ? 'bg-red-100 text-red-800' :
+                                                    msg.data.prediction === 'Moderate Anxiety' ? 'bg-orange-100 text-orange-800' :
+                                                    msg.data.prediction === 'Low Anxiety' ? 'bg-green-100 text-green-800' :
+                                                    'bg-[#B2C9D8]/20 text-[#587584]'
+                                                }`}>
+                                                    {msg.data.prediction}
                                                 </span>
                                                 {msg.data.confidence !== undefined && (
                                                     <span className="px-3 py-1 rounded-full text-[0.6rem] font-black tracking-widest uppercase bg-white/60 text-[#587584] border border-white/40 shadow-sm">
-                                                        {msg.data.confidence.toFixed(1)}% Conf
+                                                        {(msg.data.confidence * 100).toFixed(1)}% Conf
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
 
-                                        {msg.data.suggestions && (
-                                            <div className="grid grid-cols-1 gap-3">
+                                        {msg.data.reason && (
+                                            <div className="bg-white/20 p-4 rounded-xl border border-white/10">
+                                                <p className="text-[0.65rem] font-black text-[#76919E] uppercase tracking-widest mb-1">Reasoning</p>
+                                                <p className="text-[0.7rem] font-bold text-gray-600 leading-tight">{msg.data.reason}</p>
+                                            </div>
+                                        )}
+
+                                        {msg.data.detected_words && msg.data.detected_words.length > 0 && (
+                                            <div>
+                                                <p className="text-[0.65rem] font-black text-[#94ADB8] uppercase tracking-widest mb-2">Detected Words</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {msg.data.detected_words.map((dw, i) => {
+                                                        const isHigh = dw.label === 'High';
+                                                        const isMod = dw.label === 'Moderate';
+                                                        return (
+                                                            <div key={i} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[0.65rem] font-bold tracking-wide ${
+                                                                isHigh ? 'bg-red-50 text-red-700 border-red-100' : 
+                                                                isMod ? 'bg-amber-50 text-amber-700 border-amber-100' : 
+                                                                'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                            }`}>
+                                                                {dw.word}
+                                                                <span className="opacity-60 font-black border-l border-current pl-1.5 ml-0.5 uppercase tracking-widest text-[0.55rem]">
+                                                                    {dw.label}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {msg.data.suggestions && msg.data.suggestions.length > 0 && (
+                                            <div className="grid grid-cols-1 gap-3 mt-4">
+                                                <p className="text-[0.65rem] font-black text-[#94ADB8] uppercase tracking-widest mb-1">Tailored Suggestions</p>
                                                 {msg.data.suggestions.slice(0, 3).map((s, i) => (
                                                     <div key={i} className="flex items-center gap-3 bg-white/20 p-3 rounded-xl border border-white/10">
                                                         <div className="w-1.5 h-1.5 bg-[#76919E] rounded-full" />
@@ -116,6 +156,17 @@ const Chat = () => {
                                                 ))}
                                             </div>
                                         )}
+                                    </div>
+                                )}
+                                
+                                {msg.role === 'bot' && msg.data && msg.data.prediction === 'Uncertain' && msg.data.follow_up && (
+                                    <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100/50 mt-2 ml-2">
+                                        <p className="text-[0.65rem] font-black text-blue-600 uppercase tracking-widest mb-3">Questions for Clarity</p>
+                                        <ul className="list-disc list-inside text-[0.7rem] font-bold text-blue-800 leading-relaxed space-y-1">
+                                            {msg.data.follow_up.map((q, i) => (
+                                                <li key={i}>{q}</li>
+                                            ))}
+                                        </ul>
                                     </div>
                                 )}
                             </div>
