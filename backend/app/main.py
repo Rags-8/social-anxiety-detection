@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+import logging
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import json
@@ -13,7 +15,37 @@ from .prediction_system import predict_with_words
 # Use existing ml_utils to load the pickle model and clean text
 from .ml_utils import get_model, clean_text, initialize_nltk
 
-app = FastAPI(title="Social Anxiety Prediction API")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Starting Social Anxiety API...")
+    try:
+        logger.info("Initializing database...")
+        init_db()
+        logger.info("Database initialized.")
+        
+        logger.info("Initializing NLTK components...")
+        initialize_nltk()
+        logger.info("NLTK components initialized.")
+        
+        logger.info("Loading ML model...")
+        model = get_model()
+        if model:
+            logger.info("ML model loaded successfully.")
+        else:
+            logger.warning("ML model failed to load during startup.")
+    except Exception as e:
+        logger.error(f"Error during startup: {e}", exc_info=True)
+    
+    yield
+    # Shutdown
+    logger.info("Shutting down Social Anxiety API...")
+
+app = FastAPI(title="Social Anxiety Prediction API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,14 +54,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def startup_event():
-    # Initialize SQLite database schema
-    init_db()
-    # Pre-load NLTK and the V3 model to guarantee fast requests
-    initialize_nltk()
-    get_model()
 
 @app.get("/")
 def read_root():
